@@ -491,7 +491,6 @@ FltPostCreate(
 	BOOLEAN                                    streamContextCreated = FALSE, streamHandleContextReplaced = FALSE;
 	ULONG                                       desiredAccess = Cbd->Iopb->Parameters.Create.SecurityContext->DesiredAccess ;
 	FILE_STANDARD_INFORMATION   fileStandardInformation ;
-	FILE_POSITION_INFORMATION     filePositionInformation;
 	
 	if(!NT_SUCCESS(Cbd->IoStatus.Status)) {
 
@@ -1293,12 +1292,7 @@ FltPreWrite(
     ULONG                                       writeLen                         = iopb->Parameters.Write.Length;
 
     __try{           
-
-	     if(!(Data->Iopb->IrpFlags & (IRP_NOCACHE | IRP_PAGING_IO | IRP_SYNCHRONOUS_PAGING_IO))) {
-
-			__leave;
-	     }
-		 
+	     		 
             status = CtxFindOrCreateStreamContext(Data, 
                                               FALSE,
                                               &streamContext,
@@ -1320,146 +1314,184 @@ FltPreWrite(
 
             FsReleaseResource(streamContext->Resource);
 
-            //
-            //  If this is a non-cached I/O we need to round the length up to the
-            //  sector size for this device.  We must do this because the file
-            //  systems do this and we need to make sure our buffer is as big
-            //  as they are expecting.
-            //
+	     if(!(Data->Iopb->IrpFlags & (IRP_NOCACHE | IRP_PAGING_IO | IRP_SYNCHRONOUS_PAGING_IO))) {
 
-            if (FlagOn(IRP_NOCACHE,iopb->IrpFlags)) {
+			retValue = FLT_PREOP_SYNCHRONIZE;	
+			
+	     }else {
 
-                writeLen = (ULONG)ROUND_TO_SIZE(writeLen,VolumeContext->SectorSize);
-            }
+	            //
+	            //  If this is a non-cached I/O we need to round the length up to the
+	            //  sector size for this device.  We must do this because the file
+	            //  systems do this and we need to make sure our buffer is as big
+	            //  as they are expecting.
+	            //
 
-            //
-            //  Allocate nonPaged memory for the buffer we are swapping to.
-            //  If we fail to get the memory, just don't swap buffers on this
-            //  operation.
-            //
+	            if (FlagOn(IRP_NOCACHE,iopb->IrpFlags)) {
 
-            newBuf = ExAllocatePoolWithTag( NonPagedPool,
-                                            writeLen,
-                                            BUFFER_SWAP_TAG );
+	                writeLen = (ULONG)ROUND_TO_SIZE(writeLen,VolumeContext->SectorSize);
+	            }
 
-            if (newBuf == NULL) {
+	            //
+	            //  Allocate nonPaged memory for the buffer we are swapping to.
+	            //  If we fail to get the memory, just don't swap buffers on this
+	            //  operation.
+	            //
 
-                LOG_PRINT( LOGFL_ERRORS,
-                           ("FileFlt!FltPreWrite:    Pid = %d %wZ Failed to allocate %d bytes of memory.\n",
-                           PsGetCurrentProcessId(),
-                            &VolumeContext->VolumeName,
-                            writeLen) );
+	            newBuf = ExAllocatePoolWithTag( NonPagedPool,
+	                                            writeLen,
+	                                            BUFFER_SWAP_TAG );
 
-                __leave;
-            }
+	            if (newBuf == NULL) {
 
-            //
-            //  We only need to build a MDL for IRP operations.  We don't need to
-            //  do this for a FASTIO operation because it is a waste of time since
-            //  the FASTIO interface has no parameter for passing the MDL to the
-            //  file system.
-            //
+	                LOG_PRINT( LOGFL_ERRORS,
+	                           ("FileFlt!FltPreWrite:    Pid = %d %wZ Failed to allocate %d bytes of memory.\n",
+	                           PsGetCurrentProcessId(),
+	                            &VolumeContext->VolumeName,
+	                            writeLen) );
 
-            if (FlagOn(Data->Flags,FLTFL_CALLBACK_DATA_IRP_OPERATION)) {
+	                __leave;
+	            }
 
-                //
-                //  Allocate a MDL for the new allocated memory.  If we fail
-                //  the MDL allocation then we won't swap buffer for this operation
-                //
+	            //
+	            //  We only need to build a MDL for IRP operations.  We don't need to
+	            //  do this for a FASTIO operation because it is a waste of time since
+	            //  the FASTIO interface has no parameter for passing the MDL to the
+	            //  file system.
+	            //
 
-                newMdl = IoAllocateMdl( newBuf,
-                                        writeLen,
-                                        FALSE,
-                                        FALSE,
-                                        NULL );
+	            if (FlagOn(Data->Flags,FLTFL_CALLBACK_DATA_IRP_OPERATION)) {
 
-                if (newMdl == NULL) {
+	                //
+	                //  Allocate a MDL for the new allocated memory.  If we fail
+	                //  the MDL allocation then we won't swap buffer for this operation
+	                //
 
-                    LOG_PRINT( LOGFL_ERRORS,
-                               ("FileFlt!FltPreWrite:    Pid = %d %wZ Failed to allocate MDL.\n",
-                                PsGetCurrentProcessId(),
-                                &VolumeContext->VolumeName) );
+	                newMdl = IoAllocateMdl( newBuf,
+	                                        writeLen,
+	                                        FALSE,
+	                                        FALSE,
+	                                        NULL );
 
-                    __leave;
-                }
+	                if (newMdl == NULL) {
 
-                //
-                //  setup the MDL for the non-paged pool we just allocated
-                //
+	                    LOG_PRINT( LOGFL_ERRORS,
+	                               ("FileFlt!FltPreWrite:    Pid = %d %wZ Failed to allocate MDL.\n",
+	                                PsGetCurrentProcessId(),
+	                                &VolumeContext->VolumeName) );
 
-                MmBuildMdlForNonPagedPool( newMdl );
-            }
+	                    __leave;
+	                }
 
-            //
-            //  If the users original buffer had a MDL, get a system address.
-            //
+	                //
+	                //  setup the MDL for the non-paged pool we just allocated
+	                //
 
-            if (iopb->Parameters.Write.MdlAddress != NULL) {
+	                MmBuildMdlForNonPagedPool( newMdl );
+	            }
 
-                origBuf = MmGetSystemAddressForMdlSafe( iopb->Parameters.Write.MdlAddress,
-                                                        NormalPagePriority );
+	            //
+	            //  If the users original buffer had a MDL, get a system address.
+	            //
 
-                if (origBuf == NULL) {
+	            if (iopb->Parameters.Write.MdlAddress != NULL) {
 
-                    LOG_PRINT( LOGFL_ERRORS,
-                               ("FileFlt!FltPreWrite:    Pid = %d %wZ Failed to get system address for MDL: %p\n",
-                               PsGetCurrentProcessId(),
-                                &VolumeContext->VolumeName,
-                                iopb->Parameters.Write.MdlAddress) );
+	                origBuf = MmGetSystemAddressForMdlSafe( iopb->Parameters.Write.MdlAddress,
+	                                                        NormalPagePriority );
 
-                    //
-                    //  If we could not get a system address for the users buffer,
-                    //  then we are going to fail this operation.
-                    //
+	                if (origBuf == NULL) {
 
-                    Data->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
-                    Data->IoStatus.Information = 0;
-                    retValue = FLT_PREOP_COMPLETE;
-                    __leave;
-                }
+	                    LOG_PRINT( LOGFL_ERRORS,
+	                               ("FileFlt!FltPreWrite:    Pid = %d %wZ Failed to get system address for MDL: %p\n",
+	                               PsGetCurrentProcessId(),
+	                                &VolumeContext->VolumeName,
+	                                iopb->Parameters.Write.MdlAddress) );
 
-            } else {
+	                    //
+	                    //  If we could not get a system address for the users buffer,
+	                    //  then we are going to fail this operation.
+	                    //
 
-                //
-                //  There was no MDL defined, use the given buffer address.
-                //
+	                    Data->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
+	                    Data->IoStatus.Information = 0;
+	                    retValue = FLT_PREOP_COMPLETE;
+	                    __leave;
+	                }
 
-                origBuf = iopb->Parameters.Write.WriteBuffer;
-            }
+	            } else {
 
-            //
-            //  Copy the memory, we must do this inside the try/except because we
-            //  may be using a users buffer address
-            //
+	                //
+	                //  There was no MDL defined, use the given buffer address.
+	                //
 
-            try {  
+	                origBuf = iopb->Parameters.Write.WriteBuffer;
+	            }
 
-		  // 处理数据
-		  
-                RtlCopyMemory( newBuf,
-                               origBuf,
-                               writeLen );
+	            //
+	            //  Copy the memory, we must do this inside the try/except because we
+	            //  may be using a users buffer address
+	            //
+
+	            try {  
+
+			  // 处理数据
+			  
+	                RtlCopyMemory( newBuf,
+	                               origBuf,
+	                               writeLen );
 
 
-            } except (EXCEPTION_EXECUTE_HANDLER) {
+	            } except (EXCEPTION_EXECUTE_HANDLER) {
 
-                //
-                //  The copy failed, return an error, failing the operation.
-                //
+	                //
+	                //  The copy failed, return an error, failing the operation.
+	                //
 
-                Data->IoStatus.Status = GetExceptionCode();
-                Data->IoStatus.Information = 0;
-                retValue = FLT_PREOP_COMPLETE;
+	                Data->IoStatus.Status = GetExceptionCode();
+	                Data->IoStatus.Information = 0;
+	                retValue = FLT_PREOP_COMPLETE;
 
-                LOG_PRINT( LOGFL_ERRORS,
-                           ("FileFlt!FltPreWrite:    Pid = %d %wZ Invalid user buffer, oldB=%p, status=%x\n",
-                           PsGetCurrentProcessId(),
-                            &VolumeContext->VolumeName,
-                            origBuf,
-                            Data->IoStatus.Status) );
+	                LOG_PRINT( LOGFL_ERRORS,
+	                           ("FileFlt!FltPreWrite:    Pid = %d %wZ Invalid user buffer, oldB=%p, status=%x\n",
+	                           PsGetCurrentProcessId(),
+	                            &VolumeContext->VolumeName,
+	                            origBuf,
+	                            Data->IoStatus.Status) );
 
-                __leave;
-            }
+	                __leave;
+	            }
+
+		    FsAcquireResourceShared(streamContext->Resource);
+		 
+	            if((Data->Iopb->Parameters.Write.ByteOffset.LowPart ==  FILE_USE_FILE_POINTER_POSITION)
+	            	&&  (Data->Iopb->Parameters.Write.ByteOffset.HighPart == -1)){
+			  
+			  if(streamContext->FileSize.QuadPart > Data->Iopb->TargetFileObject->CurrentByteOffset.QuadPart) {
+
+				Data->Iopb->Parameters.Write.ByteOffset  = Data->Iopb->TargetFileObject->CurrentByteOffset;   
+				
+				if(Data->Iopb->TargetFileObject->CurrentByteOffset.QuadPart == 0) {
+					
+	                		Data->Iopb->Parameters.Write.ByteOffset.QuadPart += streamContext->CryptContext->MetadataSize;
+				}
+			  }else{
+
+			  	Data->Iopb->Parameters.Write.ByteOffset = streamContext->FileSize;
+			  }
+	            }
+	            else if ((Data->Iopb->Parameters.Write.ByteOffset.LowPart == FILE_WRITE_TO_END_OF_FILE)
+	            	&& (Data->Iopb->Parameters.Write.ByteOffset.HighPart == -1 )) {
+
+	                 Data->Iopb->Parameters.Write.ByteOffset = streamContext->FileSize; 
+
+	            }else {
+
+	                 Data->Iopb->Parameters.Write.ByteOffset.QuadPart += streamContext->CryptContext->MetadataSize; 
+	            }
+
+		     FsReleaseResource(streamContext->Resource);		     
+
+	     }
 
             //
             //  We are ready to swap buffers, get a pre2Post context structure.
@@ -1477,43 +1509,26 @@ FltPreWrite(
                             &VolumeContext->VolumeName) );
 
                 __leave;
-            }            
+            }   	     
+            
+	     if((Data->Iopb->IrpFlags & (IRP_NOCACHE | IRP_PAGING_IO | IRP_SYNCHRONOUS_PAGING_IO))) {
 
-	     FsAcquireResourceShared(streamContext->Resource);
-		 
-            if((Data->Iopb->Parameters.Write.ByteOffset.LowPart ==  FILE_USE_FILE_POINTER_POSITION)
-            	&&  (Data->Iopb->Parameters.Write.ByteOffset.HighPart == -1)){
-		  
-		  if(streamContext->FileSize.QuadPart > Data->Iopb->TargetFileObject->CurrentByteOffset.QuadPart) {
+		     //
+	            //  Set new buffers
+	            //    
+            
+	            iopb->Parameters.Write.WriteBuffer = newBuf;
+	            iopb->Parameters.Write.MdlAddress = newMdl;
+	            FltSetCallbackDataDirty( Data );
 
-			Data->Iopb->Parameters.Write.ByteOffset  = Data->Iopb->TargetFileObject->CurrentByteOffset;   
-			
-			if(Data->Iopb->TargetFileObject->CurrentByteOffset.QuadPart == 0) {
-				
-                		Data->Iopb->Parameters.Write.ByteOffset.QuadPart += streamContext->CryptContext->MetadataSize;
-			}
-		  }else{
+		     //
+	            //  Return we want a post-operation callback
+	            //
 
-		  	Data->Iopb->Parameters.Write.ByteOffset = streamContext->FileSize;
-		  }
-            }
-            else if ((Data->Iopb->Parameters.Write.ByteOffset.LowPart == FILE_WRITE_TO_END_OF_FILE)
-            	&& (Data->Iopb->Parameters.Write.ByteOffset.HighPart == -1 )) {
+	            retValue = FLT_PREOP_SUCCESS_WITH_CALLBACK;
+	     }
 
-                 Data->Iopb->Parameters.Write.ByteOffset = streamContext->FileSize; 
-
-            }else {
-
-                 Data->Iopb->Parameters.Write.ByteOffset.QuadPart += streamContext->CryptContext->MetadataSize; 
-            }
-
-	     FsReleaseResource(streamContext->Resource);
-
-            //
-            //  Set new buffers
-            //
-
-            LOG_PRINT( LOGFL_WRITE,
+	     LOG_PRINT( LOGFL_WRITE,
                        ("FileFlt!FltPreWrite:    Pid = %d %wZ newB=%p newMdl=%p oldB=%p oldMdl=%p len=%d(%d) byteOffset = %lld\n",
                        PsGetCurrentProcessId(),
                         &VolumeContext->VolumeName,
@@ -1524,11 +1539,7 @@ FltPreWrite(
                         writeLen,
                         iopb->Parameters.Write.Length, 
                         Data->Iopb->Parameters.Write.ByteOffset.QuadPart) );
-            
-            iopb->Parameters.Write.WriteBuffer = newBuf;
-            iopb->Parameters.Write.MdlAddress = newMdl;
-            FltSetCallbackDataDirty( Data );
-
+		 
             //
             //  Pass state to our post-operation callback.
             //
@@ -1540,13 +1551,7 @@ FltPreWrite(
             p2pCtx->VolCtx = VolumeContext;
             p2pCtx->StreamContext = streamContext;
 
-            *CompletionContext = p2pCtx;
-
-            //
-            //  Return we want a post-operation callback
-            //
-
-            retValue = FLT_PREOP_SUCCESS_WITH_CALLBACK;
+            *CompletionContext = p2pCtx;           
             
     }__finally{
 
@@ -1582,28 +1587,71 @@ FltPostWrite(
 {
 
     FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
-
     PPRE_2_POST_CONTEXT p2pCtx = CbdContext;
     PVOLUME_CONTEXT volumeContext = p2pCtx->VolCtx;
 
     UNREFERENCED_PARAMETER( FltObjects );
     UNREFERENCED_PARAMETER( Flags );
+	
+    if(!(Cbd->Iopb->IrpFlags & (IRP_NOCACHE | IRP_PAGING_IO | IRP_SYNCHRONOUS_PAGING_IO))) {
 
-    LOG_PRINT( LOGFL_WRITE,
-               ("FileFlt!FltPostWrite:    Pid = %d %wZ newB=%p status = 0x%x info=%d byteOffset = %lld fileSize = %lld Freeing\n",
-               PsGetCurrentProcessId(),
-                &p2pCtx->VolCtx->VolumeName,
-                p2pCtx->SwappedBuffer,
-                Cbd->IoStatus.Status,
-                Cbd->IoStatus.Information,
-                Cbd->Iopb->Parameters.Write.ByteOffset.QuadPart,
-                p2pCtx->StreamContext->FileSize.QuadPart) );
+		NTSTATUS status = STATUS_SUCCESS;
+		FILE_END_OF_FILE_INFORMATION fileEndOfFileInformation;
 
-    //
-    //  Free allocate POOL and volume context
-    //
+	__try{		
+		
+		if (!NT_SUCCESS(Cbd->IoStatus.Status) ||
+	            (Cbd->IoStatus.Information == 0)) {
 
-    ExFreePool( p2pCtx->SwappedBuffer );
+	            __leave;
+	        }
+
+		FsAcquireResourceShared(p2pCtx->StreamContext->Resource);
+		
+		fileEndOfFileInformation.EndOfFile.QuadPart = p2pCtx->StreamContext->FileSize.QuadPart + Cbd->IoStatus.Information;
+
+		FsReleaseResource(p2pCtx->StreamContext->Resource);
+			
+		status = FsSetInformationFile(Cbd->Iopb->TargetInstance,
+							Cbd->Iopb->TargetFileObject,
+							&fileEndOfFileInformation,
+							sizeof(fileEndOfFileInformation),
+							FileEndOfFileInformation);
+
+		if(NT_SUCCESS(status)) {
+
+			FsAcquireResourceExclusive(p2pCtx->StreamContext->Resource);
+
+			p2pCtx->StreamContext->FileSize.QuadPart += Cbd->IoStatus.Information;
+
+			FsReleaseResource(p2pCtx->StreamContext->Resource);
+		}
+		
+	}__finally{
+
+		
+	}			
+    }else{
+    
+	    
+
+	    LOG_PRINT( LOGFL_WRITE,
+	               ("FileFlt!FltPostWrite:    Pid = %d %wZ newB=%p status = 0x%x info=%d byteOffset = %lld fileSize = %lld Freeing\n",
+	               PsGetCurrentProcessId(),
+	                &p2pCtx->VolCtx->VolumeName,
+	                p2pCtx->SwappedBuffer,
+	                Cbd->IoStatus.Status,
+	                Cbd->IoStatus.Information,
+	                Cbd->Iopb->Parameters.Write.ByteOffset.QuadPart,
+	                p2pCtx->StreamContext->FileSize.QuadPart) );
+
+	    //
+	    //  Free allocate POOL and volume context
+	    //
+
+	    ExFreePool( p2pCtx->SwappedBuffer );	    
+    }
+
     FltReleaseContext( p2pCtx->StreamContext );
 
     ExFreeToNPagedLookasideList( &volumeContext->Pre2PostContextList,

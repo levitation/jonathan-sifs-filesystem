@@ -991,6 +991,116 @@ FsCheckFileExistAndDirectoryByFileNameCleanup:
 	return rc;
 }
 
+NTSTATUS
+FsQueryInformationFile(
+	__in       PFLT_INSTANCE Instance,
+  	__in       PFILE_OBJECT FileObject,
+  	__out      PVOID FileInformation,
+  	__in       ULONG Length,
+  	__in       FILE_INFORMATION_CLASS FileInformationClass,
+  	__out_opt  PULONG LengthReturned
+	 )
+{
+	NTSTATUS status = STATUS_UNSUCCESSFUL; 
+	PFLT_CALLBACK_DATA cbd = NULL; 
+
+	if((Instance == NULL)
+		|| (FileObject == NULL)
+		|| (FileInformation == NULL)
+		|| (Length == 0)){
+
+		status = STATUS_INVALID_PARAMETER;
+		
+		goto FsQueryInformationFileCleanup;
+	}
+
+	status = FltAllocateCallbackData( Instance, FileObject, &cbd ); 
+	
+	if(!NT_SUCCESS(status))  {
+		
+		goto FsQueryInformationFileCleanup;
+	}
+
+	cbd->Iopb->MajorFunction = IRP_MJ_QUERY_INFORMATION;
+	cbd->Iopb->Parameters.QueryFileInformation.FileInformationClass = FileInformationClass;
+	cbd->Iopb->Parameters.QueryFileInformation.InfoBuffer = FileInformation;
+	cbd->Iopb->Parameters.QueryFileInformation.Length = Length;
+
+	FltPerformSynchronousIo( cbd ); 
+	
+	status = cbd->IoStatus.Status;
+
+	if(LengthReturned) {
+		
+		*LengthReturned = cbd->IoStatus.Information;
+	}
+
+	FltFreeCallbackData( cbd );
+
+FsQueryInformationFileCleanup:
+	
+	return status; 
+}
+
+NTSTATUS
+FsSetInformationFile (
+	__in  PFLT_INSTANCE Instance,
+	__in  PFILE_OBJECT FileObject,
+	__in  PVOID FileInformation,
+	__in  ULONG Length,
+	__in  FILE_INFORMATION_CLASS FileInformationClass
+	)
+{
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	PFLT_CALLBACK_DATA cbd = NULL;
+
+	if((Instance == NULL)
+		|| (FileObject == NULL)
+		|| (FileInformation == NULL)
+		|| (Length == 0)){
+
+		status = STATUS_INVALID_PARAMETER;
+		
+		goto FsSetInformationFileCleanup;
+	}
+
+	if((FileInformationClass == FileRenameInformation)
+		|| (FileInformationClass == FileLinkInformation)
+		|| (FileInformationClass == FileMoveClusterInformation)){
+
+		status = STATUS_INVALID_PARAMETER;
+		
+		goto FsSetInformationFileCleanup;
+	}
+	
+	status = FltAllocateCallbackData(
+					Instance,
+					FileObject,
+					&cbd );
+
+	
+	if( !NT_SUCCESS(status) ){
+
+		goto FsSetInformationFileCleanup;
+	}
+	
+	cbd->Iopb->MajorFunction = IRP_MJ_SET_INFORMATION;
+	cbd->Iopb->Parameters.SetFileInformation.FileInformationClass = FileInformationClass;
+	cbd->Iopb->Parameters.SetFileInformation.Length = Length;
+	cbd->Iopb->Parameters.SetFileInformation.ParentOfTarget = NULL;
+	cbd->Iopb->Parameters.SetFileInformation.DeleteHandle = NULL;
+	cbd->Iopb->Parameters.SetFileInformation.InfoBuffer = FileInformation;
+
+	FltPerformSynchronousIo( cbd );
+	
+	status = cbd->IoStatus.Status;
+	
+	FltFreeCallbackData( cbd );
+
+FsSetInformationFileCleanup:
+	
+	return status;
+}
 
 //-----------------------------------------------------------------------------------------
 //Ãû×ÖÏà¹Ø

@@ -146,7 +146,24 @@ FsCalcFileHash(
 	__out UCHAR *FileHash
 	);
 
+NTSTATUS
+FsQueryInformationFile(
+	__in       PFLT_INSTANCE Instance,
+  	__in       PFILE_OBJECT FileObject,
+  	__out      PVOID FileInformation,
+  	__in       ULONG Length,
+  	__in       FILE_INFORMATION_CLASS FileInformationClass,
+  	__out_opt  PULONG LengthReturned
+	 );
 
+NTSTATUS
+FsSetInformationFile (
+	__in  PFLT_INSTANCE Instance,
+	__in  PFILE_OBJECT FileObject,
+	__in  PVOID FileInformation,
+	__in  ULONG Length,
+	__in  FILE_INFORMATION_CLASS FileInformationClass
+	);
 //----------------------------------------------------------------------------------------
 //Ãû×ÖÏà¹Ø
 
