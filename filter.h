@@ -194,7 +194,8 @@ FLT_PREOP_CALLBACK_STATUS
 FltPreNetworkQueryOpen(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_POSTOP_CALLBACK_STATUS

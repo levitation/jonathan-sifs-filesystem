@@ -69,14 +69,18 @@ TaskCheckTrustTask(
 	FLT_TASK_STATE rc = FLT_TASK_STATE_UNKNOWN;
 	CHAR task_name[TASK_NAME_MAX_LEN];
 
-	if(TaskGetNameById(Pid, task_name) == 0) {
+	if(Pid == (HANDLE)4) {
+
+		rc = FLT_TASK_STATE_SYSTEM;
+		
+	}else if(TaskGetNameById(Pid, task_name) == 0) {
 
 		if(TaskCheckTaskByName(task_name, "notepad.exe") == 0){
 
 			rc = FLT_TASK_STATE_TRUST_HOOK;
 		}else if(TaskCheckTaskByName(task_name, "explorer.exe") == 0){
 
-			rc = FLT_TASK_STATE_EXPLORE_UNHOOK;
+			rc = FLT_TASK_STATE_EXPLORE_HOOK;
 		}else if(TaskCheckTaskByName(task_name, "uedit32.exe") == 0){
 
                     rc = FLT_TASK_STATE_TRUST_HOOK;

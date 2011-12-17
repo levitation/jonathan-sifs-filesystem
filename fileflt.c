@@ -92,12 +92,11 @@ CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
 	  SwapPreSetInformation,
 	  SwapPostSetInformation },
 
-#if 0
 	{ IRP_MJ_NETWORK_QUERY_OPEN,
 	  0,
 	  SwapPreNetworkQueryOpen,
 	  SwapPostNetworkQueryOpen},
-#endif
+
 	{ IRP_MJ_DIRECTORY_CONTROL,
          0,
          SwapPreDirCtrlBuffers,
@@ -979,6 +978,8 @@ Return Value:
 --*/
 {
     FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+    PVOLUME_CONTEXT volumeContext = NULL;
+    NTSTATUS status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
@@ -987,10 +988,30 @@ Return Value:
     retValue = SifsPreNetworkQueryOpen(Data, FltObjects, CompletionContext);
     
     if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK){
-    			
-    		retValue = FltPreNetworkQueryOpen(Data, FltObjects, CompletionContext);
+
+		status = FltGetVolumeContext( FltObjects->Filter,
+                                      FltObjects->Volume,
+                                      &volumeContext );
+
+             if (!NT_SUCCESS(status)) {
+
+                LOG_PRINT( LOGFL_ERRORS,
+                           ("FileFlt!SwapPreNetworkQueryOpen:          Error getting volume context, status=%x\n",
+                            status) );
+
+                 goto SwapPreNetworkQueryOpenCleanup;
+             }
+
+    		retValue = FltPreNetworkQueryOpen(Data, FltObjects, CompletionContext, volumeContext);
     }
-    
+
+SwapPreNetworkQueryOpenCleanup:
+
+    if(volumeContext != NULL) {
+
+	FltReleaseContext(volumeContext);
+    }
+	
     return retValue;
 }
 

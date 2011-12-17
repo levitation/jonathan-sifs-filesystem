@@ -32,5 +32,6 @@ SOURCES=fileflt.c   \
 	 read_write.c \
 	 crypto.c \
 	 module.c \
+	 keystore.c \
         fileflt.rc
 

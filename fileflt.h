@@ -27,19 +27,9 @@
 #define DEVICE_NAME_MAX_LENGTH 64
 #define FILE_PATH_MAX_LENGTH  260
 
-#define SIFS_SALT_SIZE 8
-#define SIFS_SALT_SIZE_HEX (SIFS_SALT_SIZE*2)
-#define SIFS_MAX_KEY_BYTES 64
-#define SIFS_MAX_ENCRYPTED_KEY_BYTES 512
-#define SIFS_DEFAULT_IV_BYTES 16
+#define PAGE_CACHE_SIZE 4098
 
-#define SIFS_MAX_IV_BYTES 16	/* 128 bits */
-#define SIFS_SALT_BYTES 2
-
-#define MAGIC_SIFS_MARKER 0x3c81b7f5
-#define MAGIC_SIFS_MARKER_SIZE_BYTES 8	/* 4*2 */
-#define SIFS_MINIMUM_HEADER_EXTENT_SIZE  	4096
-#define SIFS_DEFAULT_EXTERN_SIZE       			512
+typedef struct _CRYPT_CONTEXT CRYPT_CONTEXT, *PCRYPT_CONTEXT;
 
 //
 //  MULTIVERSION NOTE: For this version of the driver, we need to know the
@@ -192,15 +182,6 @@ typedef struct _VOLUME_CONTEXT {
 #define VOLUME_CONTEXT_SIZE         sizeof( VOLUME_CONTEXT )
 
 #define MIN_SECTOR_SIZE 0x200
-
-typedef struct _CRYPT_CONTEXT{
-	ULONG  ExternSize;
-	ULONG  MetadataSize;
-
-	unsigned char Key[SIFS_MAX_KEY_BYTES];
-	unsigned char Root_iv[SIFS_MAX_IV_BYTES];
-	
-}CRYPT_CONTEXT, *PCRYPT_CONTEXT;
 
 typedef struct _STREAM_CONTEXT {
 	

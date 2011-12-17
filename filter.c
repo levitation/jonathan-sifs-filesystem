@@ -542,6 +542,11 @@ FltPostCreate(
     	
     	CtxUpdateAttributeInStreamContext(streamContext, volumeContext);
 
+	if(streamContext->CryptContext != NULL) {
+
+		SifsFreeCryptContext(streamContext->CryptContext);
+	}
+	
     	streamContext->CryptedFile = p2pCtx->CryptedFile;
     	streamContext->CryptContext = cryptContext;	
     	streamContext->FileSize = fileStandardInformation.EndOfFile;
@@ -1597,6 +1602,7 @@ FltPostWrite(
 
 		NTSTATUS status = STATUS_SUCCESS;
 		FILE_END_OF_FILE_INFORMATION fileEndOfFileInformation;
+		LONGLONG fileSize = 0;
 
 	__try{		
 		
@@ -1607,22 +1613,48 @@ FltPostWrite(
 	        }
 
 		FsAcquireResourceShared(p2pCtx->StreamContext->Resource);
+
+		if((Cbd->Iopb->Parameters.Write.ByteOffset.LowPart ==  FILE_USE_FILE_POINTER_POSITION)
+            		&&  (Cbd->Iopb->Parameters.Write.ByteOffset.HighPart == -1)){
+
+			if(Cbd->Iopb->TargetFileObject->CurrentByteOffset.QuadPart > p2pCtx->StreamContext->FileSize.QuadPart) {
+				
+				fileSize = Cbd->Iopb->TargetFileObject->CurrentByteOffset.QuadPart;
+			}else{
+
+				fileSize = p2pCtx->StreamContext->FileSize.QuadPart;
+			}
+		}else if ((Cbd->Iopb->Parameters.Write.ByteOffset.LowPart == FILE_WRITE_TO_END_OF_FILE)
+            	 	&& (Cbd->Iopb->Parameters.Write.ByteOffset.HighPart == -1 )) {
+
+			fileSize = p2pCtx->StreamContext->FileSize.QuadPart + Cbd->IoStatus.Information;
 		
-		fileEndOfFileInformation.EndOfFile.QuadPart = p2pCtx->StreamContext->FileSize.QuadPart + Cbd->IoStatus.Information;
+		}else{
 
-		FsReleaseResource(p2pCtx->StreamContext->Resource);
+			fileSize = Cbd->Iopb->Parameters.Write.ByteOffset.QuadPart + Cbd->IoStatus.Information + p2pCtx->StreamContext->CryptContext->MetadataSize;
+		}
+
+		if(fileSize > p2pCtx->StreamContext->FileSize.QuadPart) {
 			
-		status = FsSetInformationFile(Cbd->Iopb->TargetInstance,
-							Cbd->Iopb->TargetFileObject,
-							&fileEndOfFileInformation,
-							sizeof(fileEndOfFileInformation),
-							FileEndOfFileInformation);
+			fileEndOfFileInformation.EndOfFile.QuadPart = fileSize;
 
-		if(NT_SUCCESS(status)) {
+			FsReleaseResource(p2pCtx->StreamContext->Resource);
+				
+			status = FsSetInformationFile(Cbd->Iopb->TargetInstance,
+								Cbd->Iopb->TargetFileObject,
+								&fileEndOfFileInformation,
+								sizeof(fileEndOfFileInformation),
+								FileEndOfFileInformation);
 
-			FsAcquireResourceExclusive(p2pCtx->StreamContext->Resource);
+			if(NT_SUCCESS(status)) {
 
-			p2pCtx->StreamContext->FileSize.QuadPart += Cbd->IoStatus.Information;
+				FsAcquireResourceExclusive(p2pCtx->StreamContext->Resource);
+
+				p2pCtx->StreamContext->FileSize.QuadPart += Cbd->IoStatus.Information;
+
+				FsReleaseResource(p2pCtx->StreamContext->Resource);
+			}
+		}else{
 
 			FsReleaseResource(p2pCtx->StreamContext->Resource);
 		}
