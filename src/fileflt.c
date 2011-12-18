@@ -595,6 +595,8 @@ Return Value:
 {
     PFLT_IO_PARAMETER_BLOCK iopb = Data->Iopb;
     FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+    PVOLUME_CONTEXT volumeContext = NULL;
+    NTSTATUS status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
@@ -603,10 +605,30 @@ Return Value:
     retValue = SifsPreCleanup(Data, FltObjects, CompletionContext);
     
     if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK){
-		
-    	retValue = FltPreCleanup(Data, FltObjects, CompletionContext);
+
+	status = FltGetVolumeContext( FltObjects->Filter,
+                                      FltObjects->Volume,
+                                      &volumeContext );
+
+         if (!NT_SUCCESS(status)) {
+
+            LOG_PRINT( LOGFL_ERRORS,
+                       ("FileFlt!SwapPreRead:          Error getting volume context, status=%x\n",
+                        status) );
+
+             goto SwapPreCleanup_out;
+         }
+			 
+    	retValue = FltPreCleanup(Data, FltObjects, CompletionContext, volumeContext);
     }
-    
+
+SwapPreCleanup_out:
+	
+    if(volumeContext != NULL ){
+
+		FltReleaseContext(volumeContext);
+    }
+	
     return retValue;
 }
 

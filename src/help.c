@@ -9,6 +9,63 @@
 #endif
 
 //----------------------------------------------------------------------------------------
+
+void put_unaligned_be16(u16 val, u8 *p)
+{
+	*p++ = val >> 8;
+	*p++ = val;
+}
+
+u16 get_unaligned_be16(u8 *p)
+{
+	return p[0] << 8 | p[1];
+}
+
+void put_unaligned_be32(u32 val, u8 *p)
+{
+	put_unaligned_be16(val >> 16, p);
+	put_unaligned_be16(val, p + 2);
+}
+
+u32 get_unaligned_be32(u8 *p)
+{
+	return p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3];
+}
+
+void put_unaligned_be64(u64 val, u8 *p)
+{
+	put_unaligned_be32(val >> 32, p);
+	put_unaligned_be32(val, p + 4);
+}
+
+u64 get_unaligned_be64(u8 *p)
+{
+	return (u64)get_unaligned_be32(p) << 32 |
+	       get_unaligned_be32(p + 4);
+}
+
+
+VOID
+FsGetRandBytes(
+	__out PVOID Data,
+	__in LONG Size
+	)
+{
+	PEPROCESS eProcess = PsGetCurrentProcess();
+
+	if(Size == 4) {
+		u32 *data = Data;
+		
+		*data = (u32)eProcess;
+	}else if(Size == 8){
+
+		u64 *data = Data;
+		
+		*data = (u64)eProcess;
+	}
+}
+
+//----------------------------------------------------------------------------------------
 //×Ö·û´®Ïà¹Ø
 
 PCHAR 

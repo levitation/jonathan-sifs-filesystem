@@ -577,10 +577,51 @@ FLT_PREOP_CALLBACK_STATUS
 FltPreCleanup(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	PSTREAM_CONTEXT streamContext = NULL;
+	BOOLEAN streamContextCreated = FALSE;
+	NTSTATUS status = STATUS_SUCCESS;
+
+	__try{
+
+		status = CtxFindOrCreateStreamContext(Data, 
+	                                              FALSE,
+	                                              &streamContext,
+	                                              &streamContextCreated);
+
+	        if (!NT_SUCCESS( status )) {
+
+	        	__leave;
+	        }
+
+	        FsAcquireResourceShared(streamContext->Resource);
+
+	        if(streamContext->CryptedFile == FALSE) {
+
+	            FsReleaseResource(streamContext->Resource);
+	            
+	            __leave;
+	        }	        
+
+		 if(SifsWriteFileSize(Data->Iopb->TargetInstance, Data->Iopb->TargetFileObject, streamContext->FileSize.QuadPart) == -1) {
+
+			LOG_PRINT(LOGFL_CLOSE,  ("FileFlt!FltPreCleanup:    Pid = %d, FileSize = %lld\n"
+				,  PsGetCurrentProcessId(),  streamContext->FileSize.QuadPart));
+		 }
+
+		 FsReleaseResource(streamContext->Resource);
+		 
+	}__finally{
+
+		if(streamContext != NULL ){
+
+			FltReleaseContext(streamContext);
+		}
+	}
 
 	return retValue;
 }
@@ -667,11 +708,10 @@ FltPreRead(
 
 			FsAcquireResourceShared(streamContext->Resource);
 
-			if(iopb->Parameters.Read.ByteOffset.QuadPart >= SifsFileValidateLength(streamContext)) {
+			if(iopb->Parameters.Read.ByteOffset.QuadPart >= SifsValidateFileSize(streamContext)) {
 
 				FsReleaseResource(streamContext->Resource);
 
-				DbgPrint("Read(1): -----------%d, %d\n", iopb->Parameters.Read.ByteOffset.QuadPart, SifsFileValidateLength(streamContext));
 				Data->IoStatus.Status = STATUS_END_OF_FILE ;
 				Data->IoStatus.Information = 0;		
 
@@ -925,9 +965,9 @@ FltPostRead(
 	                
 	            }else{
 
-	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsFileValidateLength(p2pCtx->StreamContext)) {
+	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsValidateFileSize(p2pCtx->StreamContext)) {
 
-	                    Data->IoStatus.Information = SifsFileValidateLength(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
+	                    Data->IoStatus.Information = SifsValidateFileSize(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
 	                }	                
 	            }
 	     	}
@@ -1215,9 +1255,9 @@ Return Value:
 	                
 	            }else{
 
-	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsFileValidateLength(p2pCtx->StreamContext)) {
+	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsValidateFileSize(p2pCtx->StreamContext)) {
 
-	                    Data->IoStatus.Information = SifsFileValidateLength(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
+	                    Data->IoStatus.Information = SifsValidateFileSize(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
 	                }	                
 	            }
 		 	
@@ -2231,7 +2271,7 @@ FltCheckValidateSifs(
 
 			if(FsCheckFileIsDirectoryByObject(Instance, fileObject) == FALSE) {
 				
-				rc = SifsCheckValidateSifs(Instance, fileObject, PageVirt, PageVirtLen);
+				rc = SifsQuickCheckValidateSifs(Instance, fileObject, PageVirt, PageVirtLen);
 			}
 
 			FsCloseFile(fileHandle, fileObject);

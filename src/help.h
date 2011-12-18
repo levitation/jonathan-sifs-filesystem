@@ -2,7 +2,29 @@
 #define __FILEFLT_HELP_H__
 
 #define IsNetworkVolumeDevice(DeviceType, FileSystemType)  ((DeviceType == FILE_DEVICE_NETWORK_FILE_SYSTEM) && (FileSystemType == FLT_FSTYPE_LANMAN))
+//----------------------------------------------------------------------------------------
+#define u8 	unsigned char
+#define u16 	unsigned short int
+#define u32 	unsigned int
+#define u64   unsigned long long
 
+void put_unaligned_be16(u16 val, u8 *p);
+
+u16 get_unaligned_be16(u8 *p);
+
+void put_unaligned_be32(u32 val, u8 *p);
+
+u32 get_unaligned_be32(u8 *p);
+
+void put_unaligned_be64(u64 val, u8 *p);
+
+u64 get_unaligned_be64(u8 *p);
+
+VOID
+FsGetRandBytes(
+	__out PVOID Data,
+	__in LONG Size
+	);
 //----------------------------------------------------------------------------------------
 //×Ö·û´®Ïà¹Ø
 

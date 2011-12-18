@@ -69,13 +69,11 @@ SifsPreDirCtrlBuffers(
     __deref_out_opt PVOID *CompletionContext
     );
 
-int
-SifsCheckValidateSifs(
-	__in PFLT_INSTANCE Instance,
-	__in PFILE_OBJECT FileObject,
-	__out PUCHAR  PageVirt,
-	__in LONG PageVirtLen
+ULONG
+SifsValidateFileSize(
+	__in PSTREAM_CONTEXT StreamContext
 	);
+
 
 //--------------------------------------------------------------
 //crypto
@@ -85,6 +83,25 @@ SifsInitializeCryptContext(
 	__inout PCRYPT_CONTEXT CryptContext
 	);
 
+int
+SifsWriteHeadersVirt(
+	__inout PUCHAR PageVirt,
+	__in LONG Max,
+	__out PLONG Size,
+	__in PCRYPT_CONTEXT CryptContext
+	);
+
+int
+SifsReadHeadersVirt(
+	__in PUCHAR PageVirt,
+	__inout PCRYPT_CONTEXT CryptContext,
+	__in  LONG ValidateHeaderSize
+	);
+
+int
+SifsQuickCheckValidate_i(
+	__in PUCHAR Buffer
+	);
 //--------------------------------------------------------------
 //read_write
 
@@ -117,9 +134,35 @@ SifsQuickCheckValidate(
 	__in LONG Aligned
 	);
 
-ULONG
-SifsFileValidateLength(
-	__in PSTREAM_CONTEXT StreamContext
+int
+SifsQuickCheckValidateSifs(
+	__in PFLT_INSTANCE Instance,
+	__in PFILE_OBJECT FileObject,
+	__out PUCHAR  PageVirt,
+	__in LONG PageVirtLen
+	);
+
+int
+SifsWriteFileSize(
+	__in PFLT_INSTANCE Instance,
+	__in PFILE_OBJECT FileObject,
+	__in LONGLONG  FileSize
+	);
+
+//-----------------------------------------------------------------------
+//keystore
+int
+SifsGenerateKeyPacketSet(
+	__inout PUCHAR DestBase,
+	__in PCRYPT_CONTEXT CryptContext,
+	__in PLONG Len,
+	__in LONG Max
+	);
+
+int 
+SifsParsePacketSet(
+	__inout PCRYPT_CONTEXT CryptContext,
+	__in PUCHAR Src
 	);
 
 #endif /* __FILEFLT_SIFS_H__ */
