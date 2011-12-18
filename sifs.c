@@ -9,7 +9,7 @@ SifsFileValidateLength(
 
 	if(StreamContext->CryptedFile == TRUE) {
 		
-		rc = StreamContext->FileSize.QuadPart - StreamContext->CryptContext->MetadataSize;
+		rc = StreamContext->FileSize.QuadPart - StreamContext->CryptContext.MetadataSize;
 	}else{
 
 		rc = StreamContext->FileSize.QuadPart;

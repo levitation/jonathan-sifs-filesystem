@@ -1,6 +1,5 @@
 #include "fileflt.h"
 
-
 int
 SifsWriteSifsMetadata(
         __in PFLT_INSTANCE        Instance,
@@ -15,19 +14,13 @@ SifsWriteSifsMetadata(
 {
 	int rc = -1;
 
-	UNICODE_STRING fileName = { 0, 0, NULL };
 	NTSTATUS status = STATUS_SUCCESS;
 	HANDLE fileHandle = NULL;
 	PFILE_OBJECT fileObject = NULL;
-
-       if(FsGetFileNameWithoutStreamName(NameInfo, &fileName) == -1) {
-
-		goto SifsWriteSifsMetadataCleanup;
-	}
             
 	status = FsCreateFile(Instance
                         , DesiredAccess, CreateDisposition, CreateOptions, ShareAccess, FileAttribute
-                        , &fileName, &fileHandle, &fileObject, NULL);
+                        , &NameInfo->Name, &fileHandle, &fileObject, NULL);
 
 	if(NT_SUCCESS(status)) {
 
@@ -70,119 +63,145 @@ SifsWriteSifsMetadata(
 
 SifsWriteSifsMetadataCleanup:
 
-       DbgPrint("SifsWriteSifsMetadata: %wZ, %wZ(%d), rc = %d, status = 0x%x, createDisposition = %d, createOptions = 0x%x\n"
-            , &fileName, &(NameInfo->Name), NameInfo->Name.Length, rc, status, CreateDisposition, CreateOptions);
+       DbgPrint("SifsWriteSifsMetadata: %wZ(%d), rc = %d, status = 0x%x, createDisposition = %d, createOptions = 0x%x\n"
+            , &(NameInfo->Name), NameInfo->Name.Length, rc, status, CreateDisposition, CreateOptions);
        
-	if(fileName.Buffer != NULL ) {
-		
-		FsFreeUnicodeString(&fileName);
-	}
-	
 	return rc;
 }
 
 int
-SifsCheckFileValid(
+SifsCheckValidateSifs(
 	__in PFLT_INSTANCE Instance,
-	__in PFILE_OBJECT FileObject
+	__in PFILE_OBJECT FileObject,
+	__out PUCHAR  PageVirt,
+	__in LONG PageVirtLen
 	)
 {
 	int rc = -1;
 
        NTSTATUS status = STATUS_SUCCESS;
        LARGE_INTEGER byteOffset;
-	PCHAR buffer = ExAllocatePoolWithTag(NonPagedPool, SIFS_MINIMUM_HEADER_EXTENT_SIZE, SIFS_METADATA_TAG);
+       ULONG readLen = 0;
 
-      if(buffer != NULL) {
+	RtlZeroMemory(PageVirt, PageVirtLen);
+       byteOffset.QuadPart = 0;
 
-         ULONG readLen = 0;
-         
-         RtlZeroMemory(buffer, SIFS_MINIMUM_HEADER_EXTENT_SIZE);
-
-         byteOffset.QuadPart = 0;
-
-         status = FltReadFile(Instance, FileObject, &byteOffset, SIFS_MINIMUM_HEADER_EXTENT_SIZE, buffer
+       status = FltReadFile(Instance, FileObject, &byteOffset, PageVirtLen, PageVirt
 				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET | FLTFL_IO_OPERATION_NON_CACHED, &readLen, NULL, NULL );
 
-	  if(NT_SUCCESS(status)
-            && (readLen == SIFS_MINIMUM_HEADER_EXTENT_SIZE)) {
+	  if(NT_SUCCESS(status)) {
 
-		if(buffer[0] == '1') {
+		if(PageVirt[0] == '1') {
 
 			rc = 0;
 		}
 	  }  
 
-          ExFreePoolWithTag(buffer, SIFS_METADATA_TAG);
-      }
-
 	return rc;
 }
+
+int
+SifsQuickCheckValidate(
+       __in PFLT_INSTANCE Instance,
+	__in PUNICODE_STRING FileName,
+	__inout PCRYPT_CONTEXT CryptContext,
+	__inout PBOOLEAN IsEmptyFile,
+	__in LONG Aligned
+	)
+{
+	int rc = -1;
+
+	NTSTATUS status = STATUS_SUCCESS;
+	HANDLE fileHandle = NULL;
+	PFILE_OBJECT fileObject = NULL;
+	FILE_STANDARD_INFORMATION fileStandardInformation ;
+	LONG  bufferLen = ROUND_TO_SIZE(SIFS_CHECK_FILE_VALID_MINIMUN_SIZE, Aligned);
+	PCHAR buffer = NULL; 
+       
+	status = FsOpenFile(Instance, FileName, &fileHandle, &fileObject, NULL);
+
+	if(!NT_SUCCESS(status)) {
+
+		goto SifsQuickCheckValidateCleanup;
+	}
+
+	status = FltQueryInformationFile(Instance,
+								 fileObject,
+								 &fileStandardInformation,
+								 sizeof(fileStandardInformation),
+								 FileStandardInformation,
+								 NULL
+								 ) ;
+
+	if(NT_SUCCESS(status)) {
+
+		if(fileStandardInformation.Directory == TRUE) {
+
+			goto SifsQuickCheckValidateCleanup;
+		}
+
+		if(fileStandardInformation.EndOfFile.QuadPart  == 0) {
+
+			*IsEmptyFile = TRUE;
+			goto SifsQuickCheckValidateCleanup;
+		}
+	}
+
+	buffer = ExAllocatePoolWithTag(NonPagedPool, bufferLen, SIFS_METADATA_TAG);
+
+	if(buffer == NULL) {
+
+		goto SifsQuickCheckValidateCleanup;
+	}
+
+	if(SifsCheckValidateSifs(Instance, fileObject, buffer, bufferLen) == 0) {
+
+		rc = 0;
+	}
 	
+SifsQuickCheckValidateCleanup:
+
+	if(buffer != NULL) {
+
+		 ExFreePoolWithTag(buffer, SIFS_METADATA_TAG);
+	}
+	
+	if(fileObject != NULL) {
+
+		FsCloseFile(fileHandle, fileObject);
+	}
+	
+	return rc;
+}
+
 int
 SifsReadSifsMetadata(
        __in PFLT_INSTANCE Instance,
-	__in PFLT_FILE_NAME_INFORMATION NameInfo,
-	__inout PCRYPT_CONTEXT CryptContext,
-	__inout PBOOLEAN IsEmptyFile
+	__in PFILE_OBJECT FileObject,
+	__inout PCRYPT_CONTEXT CryptContext
 	)
 {
 	int rc = -1;
 	
-	UNICODE_STRING fileName = { 0, 0, NULL };
 	NTSTATUS status = STATUS_SUCCESS;
-	HANDLE fileHandle = NULL;
-	PFILE_OBJECT fileObject = NULL;
-       int count = 0;
-       
+	PCHAR buffer = ExAllocatePoolWithTag(NonPagedPool, CryptContext->MetadataSize, SIFS_METADATA_TAG);
 
-	if(FsGetFileNameWithoutStreamName(NameInfo, &fileName) == -1) {
+	if(buffer == NULL) {
 
-            count = 1;
 		goto SifsReadSifsMetadataCleanup;
 	}
 
-	status = FsOpenFile(Instance, &fileName, &fileHandle, &fileObject, NULL);
+	if(SifsCheckValidateSifs(Instance, FileObject, buffer, CryptContext->MetadataSize) == 0) {
 
-	if(NT_SUCCESS(status)) {
-
-		FILE_STANDARD_INFORMATION fileStandardInformation ;
-
-               count = 2;
-		rc = SifsCheckFileValid(Instance, fileObject);
-
-		if( rc == -1) {
-
-            count = 3;
-			status = FltQueryInformationFile(Instance,
-										 fileObject,
-										 &fileStandardInformation,
-										 sizeof(fileStandardInformation),
-										 FileStandardInformation,
-										 NULL
-										 ) ;
-
-			if(NT_SUCCESS(status)) {
-
-count = 4;
-				if( fileStandardInformation.EndOfFile.QuadPart  == 0) {
-
-					*IsEmptyFile = TRUE;
-				}
-			}
-		}
-
-		FsCloseFile(fileHandle, fileObject);
+		rc = 0;
 	}
-
+	
 SifsReadSifsMetadataCleanup:
 
-	if(fileName.Buffer != NULL ) {
-		
-		FsFreeUnicodeString(&fileName);
-	}
+	if(buffer != NULL) {
 
-       DbgPrint("SifsReadSifsMetadata: pid = %d %wZ, rc = %d, empty = %d, count = %d\n", PsGetCurrentProcessId(), &NameInfo->Name, rc, *IsEmptyFile, count);
+		ExFreePoolWithTag(buffer, SIFS_METADATA_TAG);
+	}
 	
 	return rc;
 }

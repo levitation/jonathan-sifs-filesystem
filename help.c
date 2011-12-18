@@ -962,11 +962,7 @@ FsCheckFileExistAndDirectoryByFileName(
 	if(status != STATUS_OBJECT_NAME_NOT_FOUND) {
 
 		*Exist = TRUE;
-	}/*else if(fileStatus == FILE_DOES_NOT_EXIST){
-	
-		*Exist = TRUE;
-	}*/
-
+	}
 
 	if(NT_SUCCESS(status)) {	
 		

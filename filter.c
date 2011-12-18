@@ -131,11 +131,6 @@ FltCleanupContext(
 		
 		streamContext = Context;
 
-		if(streamContext->CryptContext != NULL){
-
-			SifsFreeCryptContext(streamContext->CryptContext);
-			streamContext->CryptContext = NULL;
-		}
 		if (streamContext->Resource != NULL) {
 
             		ExDeleteResourceLite( streamContext->Resource );
@@ -222,9 +217,21 @@ FltCheckPreCreatePassthru_2(
 
 	RtlInitUnicodeString(&pattern, L"txt");
 
+	  // 测试条件: 仅对\\Device\\HarddiskVolume3 加密
+       if((NameInfo->Volume.Length == 0)
+		|| (RtlCompareMemory(NameInfo->Volume.Buffer, L"\\Device\\HarddiskVolume3", 46) != 46)){
+
+		goto FltCheckPreCreatePassthru_2_Cleanup;
+
+	}
+	   
 	if((NameInfo->Extension.Length == 6)
-		&& (RtlCompareUnicodeString (&NameInfo->Extension,  &pattern, TRUE) == 0))
+		&& (RtlCompareUnicodeString (&NameInfo->Extension,  &pattern, TRUE) == 0)) {
+		
 		rc = -1;
+	}
+
+FltCheckPreCreatePassthru_2_Cleanup:
 	
 	return rc;
 }
@@ -248,7 +255,7 @@ FltPreCreate(
 	BOOLEAN						isEmptyFile = FALSE;
 	PPRE_2_POST_CONTEXT 		p2pCtx = NULL;
 	FLT_IO_RULE					ioRule = FLT_IORULE_RDWT;
-	PCRYPT_CONTEXT				cryptContext  = NULL;
+	CRYPT_CONTEXT				cryptContext;
        ULONG                                       desiredAccess = Data->Iopb->Parameters.Create.SecurityContext->DesiredAccess;
        ULONG                                        createDisposition = (Data->Iopb->Parameters.Create.Options >> 24) & 0x000000ff;
        ULONG                                        createOptions = Data->Iopb->Parameters.Create.Options & 0x00ffffff;
@@ -282,14 +289,6 @@ FltPreCreate(
 	 	goto FltPreCreateCleanup;
        }
 
-        // 测试条件: 仅对\\Device\\HarddiskVolume3 加密
-       if((nameInfo->Volume.Length == 0)
-		|| (RtlCompareMemory(nameInfo->Volume.Buffer, L"\\Device\\HarddiskVolume3", 46) != 46)){
-
-		goto FltPreCreateCleanup;
-
-	}
-
 	if((BooleanFlagOn( Data->Iopb->Parameters.Create.Options, FILE_DIRECTORY_FILE))
 		|| ((FsCheckFileExistAndDirectoryByFileName(Data, FltObjects, nameInfo, &fileExist, &directory) == 0)
 			&& (directory == TRUE))) {
@@ -306,22 +305,7 @@ FltPreCreate(
 
 	taskState = FltGetTaskStateInPreCreate(Data);	
 	
-	cryptContext = SifsAllocateCryptContext();
-	if(cryptContext == NULL) {
-
-		LOG_PRINT( LOGFL_ERRORS,
-                   	("FileFlt!FltPreCreate:    Pid = %d,  fileName = \"%wZ\" Failed to allocate crypt context structure\n",
-                    		PsGetCurrentProcessId(), &(nameInfo->Name)) );
-
-              Data->IoStatus.Status = STATUS_ACCESS_DENIED;
-		Data->IoStatus.Information = 0;		
-			
-		retValue = FLT_PREOP_COMPLETE;
-
-		goto FltPreCreateCleanup;
-	}
-
-	SifsInitializeCryptContext(cryptContext);
+	SifsInitializeCryptContext(&cryptContext);
 
 	if((createDisposition == FILE_CREATE)
 		|| (createDisposition == FILE_SUPERSEDE)
@@ -336,7 +320,8 @@ FltPreCreate(
 
               if(fileExist == TRUE) {
 
-                if((SifsReadSifsMetadata(Data->Iopb->TargetInstance, nameInfo, cryptContext, &isEmptyFile) == 0)){
+                if(SifsQuickCheckValidate(Data->Iopb->TargetInstance, &nameInfo->Name
+					, &cryptContext, &isEmptyFile, VolumeContext->SectorSize) == 0){
 
                     ioRule = FLT_IORULE_RDWT;
                     sifsMetadataExist = TRUE;
@@ -356,7 +341,8 @@ FltPreCreate(
 		// no crypted file
 		if(fileExist == TRUE) {
 
-			if(SifsReadSifsMetadata(Data->Iopb->TargetInstance, nameInfo, cryptContext, &isEmptyFile) == 0) {
+			if(SifsQuickCheckValidate(Data->Iopb->TargetInstance, &nameInfo->Name
+					, &cryptContext, &isEmptyFile, VolumeContext->SectorSize) == 0) {
 
 				Data->IoStatus.Status = STATUS_ACCESS_DENIED;
 				Data->IoStatus.Information = 0;		
@@ -375,7 +361,8 @@ FltPreCreate(
         
 		if(fileExist == TRUE) {
 
-			if((SifsReadSifsMetadata(Data->Iopb->TargetInstance, nameInfo, cryptContext, &isEmptyFile) == -1)
+			if((SifsQuickCheckValidate(Data->Iopb->TargetInstance, &nameInfo->Name
+					, &cryptContext, &isEmptyFile, VolumeContext->SectorSize) == -1)
 				&& (isEmptyFile == FALSE)){
 
 				ioRule = FLT_IORULE_ONLYRD;
@@ -401,7 +388,7 @@ FltPreCreate(
 
                if(SifsWriteSifsMetadata(Data->Iopb->TargetInstance
                             , desiredAccess, createDisposition, createOptions, shareAccess, fileAttribute
-                            , nameInfo, cryptContext) == -1) {
+                            , nameInfo, &cryptContext) == -1) {
 
                     LOG_PRINT( LOGFL_ERRORS,
                        	("FileFlt!FltPreCreate:    Pid = %d,  FileName = \"%wZ\" Failed to write sifs metadata.\n",
@@ -446,10 +433,8 @@ FltPreCreate(
 	p2pCtx->TaskState = taskState;
 	p2pCtx->IoRule = ioRule;
 	p2pCtx->CryptedFile = cryptedFile;
-	p2pCtx->CryptContext = cryptContext;
 	p2pCtx->NameInfo = nameInfo;
 	
-	cryptContext = NULL;
 	nameInfo = NULL;	
 
 	*CompletionContext = p2pCtx;
@@ -457,11 +442,6 @@ FltPreCreate(
 	retValue = FLT_PREOP_SUCCESS_WITH_CALLBACK;
 	
 FltPreCreateCleanup:
-
-	if(cryptContext != NULL) {
-
-		SifsFreeCryptContext(cryptContext);
-	}
 
 	if(nameInfo != NULL){
 
@@ -484,7 +464,6 @@ FltPostCreate(
 	PPRE_2_POST_CONTEXT 		p2pCtx = CbdContext;
 	PVOLUME_CONTEXT 			volumeContext = p2pCtx->VolCtx;
        PFLT_FILE_NAME_INFORMATION 	nameInfo = p2pCtx->NameInfo;
-       PCRYPT_CONTEXT				cryptContext = p2pCtx->CryptContext;
 	PSTREAM_CONTEXT 			streamContext = NULL;
 	PSTREAMHANDLE_CONTEXT 		streamHandleContext = NULL;	
 	NTSTATUS 					status = STATUS_SUCCESS;
@@ -519,6 +498,7 @@ FltPostCreate(
 		goto FltPostCreateCleanup;
 	}
 
+
 	status = CtxFindOrCreateStreamContext(Cbd, 
                                           TRUE,
                                           &streamContext,
@@ -535,24 +515,27 @@ FltPostCreate(
 
        FsAcquireResourceExclusive(streamContext->Resource);
 
+	SifsInitializeCryptContext(&(streamContext->CryptContext));
 
-    	//
+	if((p2pCtx->CryptedFile == TRUE)
+		&& ((streamContextCreated == TRUE)
+			|| (streamContext->CryptedFile == FALSE))) {
+
+		if(SifsReadSifsMetadata(Cbd->Iopb->TargetInstance, Cbd->Iopb->TargetFileObject, &(streamContext->CryptContext)) == -1){
+
+			p2pCtx->CryptedFile = FALSE;
+		}		
+	}    	
+
+	//
     	//  Update the file name in the context
     	//
     	
     	CtxUpdateAttributeInStreamContext(streamContext, volumeContext);
 
-	if(streamContext->CryptContext != NULL) {
-
-		SifsFreeCryptContext(streamContext->CryptContext);
-	}
-	
     	streamContext->CryptedFile = p2pCtx->CryptedFile;
-    	streamContext->CryptContext = cryptContext;	
     	streamContext->FileSize = fileStandardInformation.EndOfFile;
-
-       cryptContext = NULL;
-          
+			
     	//
     	//  Relinquish write acccess to the context
     	//
@@ -563,11 +546,6 @@ FltPostCreate(
 		,  PsGetCurrentProcessId(), p2pCtx->NameInfo->Name.Length, &(p2pCtx->NameInfo->Name), p2pCtx->TaskState, p2pCtx->IoRule, p2pCtx->CryptedFile, streamContext->FileSize.QuadPart));
 	
 FltPostCreateCleanup:
-
-	if(cryptContext != NULL) {
-
-		SifsFreeCryptContext(cryptContext);
-	}
 
 	if(nameInfo != NULL) {
 
@@ -784,14 +762,14 @@ FltPreRead(
 
 		     if(Data->Iopb->TargetFileObject->CurrentByteOffset.QuadPart == 0) {
 
-			  iopb->Parameters.Read.ByteOffset.QuadPart += streamContext->CryptContext->MetadataSize;
+			  iopb->Parameters.Read.ByteOffset.QuadPart += streamContext->CryptContext.MetadataSize;
 		     }
 
 	        }else{
 
 	            FsAcquireResourceShared(streamContext->Resource);
 	            
-	            iopb->Parameters.Read.ByteOffset.QuadPart += streamContext->CryptContext->MetadataSize;
+	            iopb->Parameters.Read.ByteOffset.QuadPart += streamContext->CryptContext.MetadataSize;
 
 	            FsReleaseResource(streamContext->Resource);
 	        }
@@ -1477,7 +1455,7 @@ FltPreWrite(
 				
 				if(Data->Iopb->TargetFileObject->CurrentByteOffset.QuadPart == 0) {
 					
-	                		Data->Iopb->Parameters.Write.ByteOffset.QuadPart += streamContext->CryptContext->MetadataSize;
+	                		Data->Iopb->Parameters.Write.ByteOffset.QuadPart += streamContext->CryptContext.MetadataSize;
 				}
 			  }else{
 
@@ -1491,7 +1469,7 @@ FltPreWrite(
 
 	            }else {
 
-	                 Data->Iopb->Parameters.Write.ByteOffset.QuadPart += streamContext->CryptContext->MetadataSize; 
+	                 Data->Iopb->Parameters.Write.ByteOffset.QuadPart += streamContext->CryptContext.MetadataSize; 
 	            }
 
 		     FsReleaseResource(streamContext->Resource);		     
@@ -1631,7 +1609,7 @@ FltPostWrite(
 		
 		}else{
 
-			fileSize = Cbd->Iopb->Parameters.Write.ByteOffset.QuadPart + Cbd->IoStatus.Information + p2pCtx->StreamContext->CryptContext->MetadataSize;
+			fileSize = Cbd->Iopb->Parameters.Write.ByteOffset.QuadPart + Cbd->IoStatus.Information + p2pCtx->StreamContext->CryptContext.MetadataSize;
 		}
 
 		if(fileSize > p2pCtx->StreamContext->FileSize.QuadPart) {
@@ -1851,7 +1829,7 @@ FltPostQueryInformation (
 
               FsAcquireResourceShared(streamContext->Resource);
 
-		removeLen = streamContext->CryptContext->MetadataSize /* + padding len */;
+		removeLen = streamContext->CryptContext.MetadataSize /* + padding len */;
               
 		switch (fileInformationClass){
 			
@@ -1861,11 +1839,11 @@ FltPostQueryInformation (
 
 			if (fileInformationBufferLength >= (sizeof(FILE_BASIC_INFORMATION) + sizeof(FILE_STANDARD_INFORMATION))) {
 
-				if(fileAllInformation->StandardInformation.AllocationSize.QuadPart >= streamContext->CryptContext->MetadataSize) {
+				if(fileAllInformation->StandardInformation.AllocationSize.QuadPart >= streamContext->CryptContext.MetadataSize) {
 					
 					fileAllInformation->StandardInformation.AllocationSize.QuadPart -= removeLen;
 				}
-				if(fileAllInformation->StandardInformation.EndOfFile.QuadPart >= streamContext->CryptContext->MetadataSize){
+				if(fileAllInformation->StandardInformation.EndOfFile.QuadPart >= streamContext->CryptContext.MetadataSize){
 
 					fileAllInformation->StandardInformation.EndOfFile.QuadPart -= removeLen;
 				}
@@ -1877,7 +1855,7 @@ FltPostQueryInformation (
 										sizeof(FILE_ACCESS_INFORMATION) +
 										sizeof(FILE_POSITION_INFORMATION))) {
 
-					if(fileAllInformation->PositionInformation.CurrentByteOffset.QuadPart >= streamContext->CryptContext->MetadataSize) {
+					if(fileAllInformation->PositionInformation.CurrentByteOffset.QuadPart >= streamContext->CryptContext.MetadataSize) {
 
 						fileAllInformation->PositionInformation.CurrentByteOffset.QuadPart -= removeLen;
 					}
@@ -1889,7 +1867,7 @@ FltPostQueryInformation (
 		{
 			PFILE_ALLOCATION_INFORMATION fileAllocationInformation = (PFILE_ALLOCATION_INFORMATION)fileInformationBuffer;
 
-			if(fileAllocationInformation->AllocationSize.QuadPart >= streamContext->CryptContext->MetadataSize) {
+			if(fileAllocationInformation->AllocationSize.QuadPart >= streamContext->CryptContext.MetadataSize) {
 				
 				fileAllocationInformation->AllocationSize.QuadPart -= removeLen;
 			}
@@ -1899,7 +1877,7 @@ FltPostQueryInformation (
 		{
 			PFILE_VALID_DATA_LENGTH_INFORMATION fileValidDataLengthInformation = (PFILE_VALID_DATA_LENGTH_INFORMATION)fileInformationBuffer ;
 
-			if(fileValidDataLengthInformation->ValidDataLength.QuadPart >= streamContext->CryptContext->MetadataSize ){
+			if(fileValidDataLengthInformation->ValidDataLength.QuadPart >= streamContext->CryptContext.MetadataSize ){
 
 				fileValidDataLengthInformation->ValidDataLength.QuadPart -= removeLen;
 			}
@@ -1909,11 +1887,11 @@ FltPostQueryInformation (
 		{
 			PFILE_STANDARD_INFORMATION fileStandardInformation = (PFILE_STANDARD_INFORMATION)fileInformationBuffer ;
 			
-			if(fileStandardInformation->AllocationSize.QuadPart >= streamContext->CryptContext->MetadataSize) {
+			if(fileStandardInformation->AllocationSize.QuadPart >= streamContext->CryptContext.MetadataSize) {
 
 				fileStandardInformation->AllocationSize.QuadPart -= removeLen;
 			}
-			if(fileStandardInformation->EndOfFile.QuadPart >= streamContext->CryptContext->MetadataSize) {
+			if(fileStandardInformation->EndOfFile.QuadPart >= streamContext->CryptContext.MetadataSize) {
 
 				fileStandardInformation->EndOfFile.QuadPart -= removeLen;
 			}			
@@ -1923,7 +1901,7 @@ FltPostQueryInformation (
 		{
 			PFILE_END_OF_FILE_INFORMATION fileEndOfFileInformation = (PFILE_END_OF_FILE_INFORMATION)fileInformationBuffer ;
 
-			if(fileEndOfFileInformation->EndOfFile.QuadPart >= streamContext->CryptContext->MetadataSize) {
+			if(fileEndOfFileInformation->EndOfFile.QuadPart >= streamContext->CryptContext.MetadataSize) {
 				
 				fileEndOfFileInformation->EndOfFile.QuadPart -= removeLen;
 			}
@@ -1933,7 +1911,7 @@ FltPostQueryInformation (
 		{
 			PFILE_POSITION_INFORMATION filePositionInformation = (PFILE_POSITION_INFORMATION)fileInformationBuffer ;
 
-			if(filePositionInformation->CurrentByteOffset.QuadPart >= streamContext->CryptContext->MetadataSize) {
+			if(filePositionInformation->CurrentByteOffset.QuadPart >= streamContext->CryptContext.MetadataSize) {
 				
 				filePositionInformation->CurrentByteOffset.QuadPart -= removeLen;
 			}			
@@ -1943,12 +1921,12 @@ FltPostQueryInformation (
 		{
 			PFILE_NETWORK_OPEN_INFORMATION fileNetworkOpenInformation = (PFILE_NETWORK_OPEN_INFORMATION) fileInformationBuffer;
 
-			if(fileNetworkOpenInformation->AllocationSize.QuadPart >= streamContext->CryptContext->MetadataSize){
+			if(fileNetworkOpenInformation->AllocationSize.QuadPart >= streamContext->CryptContext.MetadataSize){
 
 				fileNetworkOpenInformation->AllocationSize.QuadPart -= removeLen;
 			}
 
-			if(fileNetworkOpenInformation->EndOfFile.QuadPart >= streamContext->CryptContext->MetadataSize){
+			if(fileNetworkOpenInformation->EndOfFile.QuadPart >= streamContext->CryptContext.MetadataSize){
 
 				fileNetworkOpenInformation->EndOfFile.QuadPart -= removeLen;
 			}
@@ -2032,8 +2010,8 @@ FltPreSetInformation(
 			{
 				PFILE_ALL_INFORMATION fileAllInformation = (PFILE_ALL_INFORMATION)fileInformationBuffer ;
                             
-				fileAllInformation->PositionInformation.CurrentByteOffset.QuadPart += streamContext->CryptContext->MetadataSize;
-				fileAllInformation->StandardInformation.EndOfFile.QuadPart += streamContext->CryptContext->MetadataSize;
+				fileAllInformation->PositionInformation.CurrentByteOffset.QuadPart += streamContext->CryptContext.MetadataSize;
+				fileAllInformation->StandardInformation.EndOfFile.QuadPart += streamContext->CryptContext.MetadataSize;
 
                             streamContext->FileSize = fileAllInformation->StandardInformation.EndOfFile;
 			}
@@ -2042,7 +2020,7 @@ FltPreSetInformation(
 			{
 				PFILE_ALLOCATION_INFORMATION fileAllocationInformation = (PFILE_ALLOCATION_INFORMATION)fileInformationBuffer ;	
 
-				fileAllocationInformation->AllocationSize.QuadPart += streamContext->CryptContext->MetadataSize;  
+				fileAllocationInformation->AllocationSize.QuadPart += streamContext->CryptContext.MetadataSize;  
 			} 
 			break;
 		case FileEndOfFileInformation:
@@ -2051,7 +2029,7 @@ FltPreSetInformation(
 
 				DbgPrint("PreSetInforamtion: pid = %d, %lld, %lld\n", PsGetCurrentProcessId(), streamContext->FileSize.QuadPart, fileEndOfFileInformation->EndOfFile.QuadPart);
 				
-				fileEndOfFileInformation->EndOfFile.QuadPart += streamContext->CryptContext->MetadataSize;
+				fileEndOfFileInformation->EndOfFile.QuadPart += streamContext->CryptContext.MetadataSize;
                             
                             streamContext->FileSize = fileEndOfFileInformation->EndOfFile;
 
@@ -2062,7 +2040,7 @@ FltPreSetInformation(
 			{
 				PFILE_STANDARD_INFORMATION fileStandardInforamtion = (PFILE_STANDARD_INFORMATION)fileInformationBuffer ;
 
-				fileStandardInforamtion->EndOfFile.QuadPart += streamContext->CryptContext->MetadataSize;
+				fileStandardInforamtion->EndOfFile.QuadPart += streamContext->CryptContext.MetadataSize;
 
                             streamContext->FileSize = fileStandardInforamtion->EndOfFile;
 			}
@@ -2071,14 +2049,14 @@ FltPreSetInformation(
 			{
 				PFILE_POSITION_INFORMATION filePositionInformation = (PFILE_POSITION_INFORMATION)fileInformationBuffer ;
                             
-				filePositionInformation->CurrentByteOffset.QuadPart += streamContext->CryptContext->MetadataSize;
+				filePositionInformation->CurrentByteOffset.QuadPart += streamContext->CryptContext.MetadataSize;
 			}
 			break;
 		case FileValidDataLengthInformation:
 			{
 				PFILE_VALID_DATA_LENGTH_INFORMATION fileValidDataLengthInformation = (PFILE_VALID_DATA_LENGTH_INFORMATION)fileInformationBuffer ;
 
-				fileValidDataLengthInformation->ValidDataLength.QuadPart += streamContext->CryptContext->MetadataSize;				
+				fileValidDataLengthInformation->ValidDataLength.QuadPart += streamContext->CryptContext.MetadataSize;				
 			}
 			break;
 		default:
@@ -2123,11 +2101,44 @@ FltPreNetworkQueryOpen(
     __in PVOLUME_CONTEXT VolumeContext
     )
 {
-	FLT_PREOP_CALLBACK_STATUS 	retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;//FLT_PREOP_SYNCHRONIZE;
+	FLT_PREOP_CALLBACK_STATUS 	retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	PFLT_FILE_NAME_INFORMATION 	nameInfo = NULL;
+	NTSTATUS status = STATUS_SUCCESS;
+	CRYPT_CONTEXT cryptContext ;
+	BOOLEAN isEmptyFile = FALSE;
 
-	if(FLT_IS_FASTIO_OPERATION(Data)) {
+	status = FltGetFileNameInformation( Data,
+	                                        FLT_FILE_NAME_NORMALIZED |
+	                                        FLT_FILE_NAME_QUERY_ALWAYS_ALLOW_CACHE_LOOKUP,
+	                                        &nameInfo );
+	
+       if (!NT_SUCCESS( status )) {
 
-		retValue = FLT_PREOP_DISALLOW_FASTIO;
+            goto FltPreNetworkQueryOpenCleanup;
+       }
+
+       status = FltParseFileNameInformation( nameInfo );
+	  
+       if (!NT_SUCCESS( status )) {
+        
+	 	goto FltPreNetworkQueryOpenCleanup;
+       }
+
+	SifsInitializeCryptContext(&cryptContext);
+	
+	if(SifsQuickCheckValidate(Data->Iopb->TargetInstance, &nameInfo->Name, &cryptContext, &isEmptyFile, VolumeContext->SectorSize) == 0){
+
+		retValue = FLT_PREOP_SUCCESS_WITH_CALLBACK;
+	}
+	
+FltPreNetworkQueryOpenCleanup:
+	
+	if(retValue != FLT_PREOP_SUCCESS_WITH_CALLBACK) {
+		
+		if(FLT_IS_FASTIO_OPERATION(Data)) {
+
+			retValue = FLT_PREOP_DISALLOW_FASTIO;
+		}
 	}
 
 	return retValue;
@@ -2143,6 +2154,7 @@ FltPostNetworkQueryOpen (
 {
 	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
 	PFILE_NETWORK_OPEN_INFORMATION fileNetworkOpenInformation = NULL;
+	CRYPT_CONTEXT cryptContext ;
 
 	__try{
 
@@ -2150,23 +2162,25 @@ FltPostNetworkQueryOpen (
 
 			__leave;
 		}
-#if 0		
+
+		SifsInitializeCryptContext(&cryptContext);
+		
 		fileNetworkOpenInformation = Cbd->Iopb->Parameters.NetworkQueryOpen.NetworkInformation;
 
 		if(fileNetworkOpenInformation != NULL) {
 
 			BOOLEAN modified = FALSE;
 
-			if(fileNetworkOpenInformation->EndOfFile.QuadPart >= streamContext->CryptContext->MetadataSize){
+			if(fileNetworkOpenInformation->EndOfFile.QuadPart >= cryptContext.MetadataSize){
 
-				fileNetworkOpenInformation->EndOfFile.QuadPart -= streamContext->CryptContext->MetadataSize;
+				fileNetworkOpenInformation->EndOfFile.QuadPart -= cryptContext.MetadataSize;
 
 				modified = TRUE;
 			}
 
-			if(fileNetworkOpenInformation->AllocationSize.QuadPart >= streamContext->CryptContext->MetadataSize){
+			if(fileNetworkOpenInformation->AllocationSize.QuadPart >= cryptContext.MetadataSize){
 
-				fileNetworkOpenInformation->AllocationSize.QuadPart -= streamContext->CryptContext->MetadataSize;
+				fileNetworkOpenInformation->AllocationSize.QuadPart -= cryptContext.MetadataSize;
 
 				modified = TRUE;
 			}
@@ -2176,7 +2190,7 @@ FltPostNetworkQueryOpen (
 				FltSetCallbackDataDirty(Cbd);
 			}			
 		}
-#endif
+
 	}__finally{
 
 	}	
@@ -2187,12 +2201,14 @@ FltPostNetworkQueryOpen (
 #define 	FILE_NAME_MAX_LENGTH 128
 
 int
-FltCheckFileIsSifs(
+FltCheckValidateSifs(
        __in PFLT_INSTANCE    Instance,
 	__in PWCHAR PathName,
 	__in ULONG	PathNameLength,
 	__in PWCHAR FileName,
-	__in ULONG  FileNameLength
+	__in ULONG  FileNameLength,
+	__inout PUCHAR PageVirt,
+	__in    LONG PageVirtLen
 	)
 {
 	int rc = -1;
@@ -2204,8 +2220,7 @@ FltCheckFileIsSifs(
 		HANDLE			fileHandle = NULL;
 		PFILE_OBJECT		fileObject = NULL;
 		
-		RtlCopyMemory(PathName + PathNameLength, FileName, FileNameLength * sizeof(WCHAR));
-		
+		RtlCopyMemory(PathName + PathNameLength, FileName, FileNameLength * sizeof(WCHAR));		
 		PathName[PathNameLength + FileNameLength] = L'\0';
 
 		RtlInitUnicodeString(&fileName, PathName);
@@ -2216,7 +2231,7 @@ FltCheckFileIsSifs(
 
 			if(FsCheckFileIsDirectoryByObject(Instance, fileObject) == FALSE) {
 				
-				rc = SifsCheckFileValid(Instance, fileObject);
+				rc = SifsCheckValidateSifs(Instance, fileObject, PageVirt, PageVirtLen);
 			}
 
 			FsCloseFile(fileHandle, fileObject);
@@ -2239,6 +2254,8 @@ FltCheckDirectoryValue(
 	FILE_INFORMATION_CLASS  fileInformationClass = Data->Iopb->Parameters.DirectoryControl.QueryDirectory.FileInformationClass;
 	PWCHAR pathName = NULL;
 	ULONG pathNameLength = 0;
+	PUCHAR sifsHeadMetadata = NULL;
+	LONG   sifsHeadMetadataLen = 0;
 
 	__try {
 
@@ -2255,6 +2272,14 @@ FltCheckDirectoryValue(
 			if(pathName == NULL){
 
 				__leave;
+			}		
+
+			sifsHeadMetadataLen = ROUND_TO_SIZE(SIFS_CHECK_FILE_VALID_MINIMUN_SIZE, P2pCtx->VolCtx->SectorSize);
+			sifsHeadMetadata = ExAllocatePoolWithTag(NonPagedPool, sifsHeadMetadataLen, SIFS_METADATA_TAG);
+
+			if(sifsHeadMetadata == NULL) {
+
+				__leave;
 			}
 
 			RtlCopyMemory(pathName, P2pCtx->NameInfo->Name.Buffer, P2pCtx->NameInfo->Name.Length);
@@ -2267,6 +2292,8 @@ FltCheckDirectoryValue(
 
 				pathNameLength++;
 			}
+
+			
 		}
 
 		switch(fileInformationClass){
@@ -2277,8 +2304,8 @@ FltCheckDirectoryValue(
 
 				do{
 
-					if(FltCheckFileIsSifs(Data->Iopb->TargetInstance, pathName, pathNameLength
-						, fileBothDirInformation->FileName, fileBothDirInformation->FileNameLength /sizeof(WCHAR)) == 0) {
+					if(FltCheckValidateSifs(Data->Iopb->TargetInstance, pathName, pathNameLength,fileBothDirInformation->FileName
+						, fileBothDirInformation->FileNameLength /sizeof(WCHAR), sifsHeadMetadata, sifsHeadMetadataLen) == 0) {
 
 						if(fileBothDirInformation->EndOfFile.QuadPart >= SIFS_MINIMUM_HEADER_EXTENT_SIZE) {
 
@@ -2308,8 +2335,8 @@ FltCheckDirectoryValue(
 
 				do{
 
-					if(FltCheckFileIsSifs(Data->Iopb->TargetInstance, pathName, pathNameLength
-						, fileDirectoryInformation->FileName, fileDirectoryInformation->FileNameLength /sizeof(WCHAR)) == 0) {
+					if(FltCheckValidateSifs(Data->Iopb->TargetInstance, pathName, pathNameLength, fileDirectoryInformation->FileName
+						, fileDirectoryInformation->FileNameLength /sizeof(WCHAR), sifsHeadMetadata, sifsHeadMetadataLen) == 0) {
 
 						if(fileDirectoryInformation->EndOfFile.QuadPart >= SIFS_MINIMUM_HEADER_EXTENT_SIZE) {
 
@@ -2338,8 +2365,8 @@ FltCheckDirectoryValue(
 
 				do{
 
-					if(FltCheckFileIsSifs(Data->Iopb->TargetInstance, pathName, pathNameLength
-						, fileFullDirInformation->FileName, fileFullDirInformation->FileNameLength /sizeof(WCHAR)) == 0) {
+					if(FltCheckValidateSifs(Data->Iopb->TargetInstance, pathName, pathNameLength, fileFullDirInformation->FileName
+						, fileFullDirInformation->FileNameLength /sizeof(WCHAR), sifsHeadMetadata, sifsHeadMetadataLen) == 0) {
 
 						if(fileFullDirInformation->EndOfFile.QuadPart >= SIFS_MINIMUM_HEADER_EXTENT_SIZE) {
 
@@ -2368,8 +2395,8 @@ FltCheckDirectoryValue(
 
 				do{
 
-					if(FltCheckFileIsSifs(Data->Iopb->TargetInstance, pathName, pathNameLength
-						, fileIdBothDirInformation->FileName, fileIdBothDirInformation->FileNameLength /sizeof(WCHAR)) == 0) {
+					if(FltCheckValidateSifs(Data->Iopb->TargetInstance, pathName, pathNameLength, fileIdBothDirInformation->FileName
+						, fileIdBothDirInformation->FileNameLength /sizeof(WCHAR), sifsHeadMetadata, sifsHeadMetadataLen) == 0) {
 
 						if(fileIdBothDirInformation->EndOfFile.QuadPart >= SIFS_MINIMUM_HEADER_EXTENT_SIZE) {
 
@@ -2398,8 +2425,8 @@ FltCheckDirectoryValue(
 
 				do{
 
-					if(FltCheckFileIsSifs(Data->Iopb->TargetInstance, pathName, pathNameLength
-						, fileIdFullDirInformation->FileName, fileIdFullDirInformation->FileNameLength /sizeof(WCHAR)) == 0) {
+					if(FltCheckValidateSifs(Data->Iopb->TargetInstance, pathName, pathNameLength, fileIdFullDirInformation->FileName
+						, fileIdFullDirInformation->FileNameLength /sizeof(WCHAR), sifsHeadMetadata, sifsHeadMetadataLen) == 0) {
 
 						if(fileIdFullDirInformation->EndOfFile.QuadPart >= SIFS_MINIMUM_HEADER_EXTENT_SIZE) {
 
@@ -2426,13 +2453,14 @@ FltCheckDirectoryValue(
 		}
 	}__finally{
 
-		if(P2pCtx->NameInfo != NULL){
-
-		}
-
 		if(pathName != NULL){
 
 			ExFreePoolWithTag(pathName, NAME_TAG);
+		}
+
+		if(sifsHeadMetadata != NULL) {
+
+			ExFreePoolWithTag(sifsHeadMetadata, SIFS_METADATA_TAG);
 		}
 	}
 }
