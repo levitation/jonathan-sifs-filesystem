@@ -121,8 +121,8 @@ SifsWriteSifsMetadata(
 int
 SifsReadSifsMetadata(
        __in PFLT_INSTANCE Instance,
-	__in PFILE_OBJECT FileObject,
-	__inout PCRYPT_CONTEXT CryptContext
+	__in PFILE_OBJECT FileObject,	
+	__inout PSTREAM_CONTEXT StreamContext
 	);
 
 int
@@ -146,6 +146,8 @@ int
 SifsWriteFileSize(
 	__in PFLT_INSTANCE Instance,
 	__in PFILE_OBJECT FileObject,
+	__inout PUCHAR Metadata,
+	__in LONG MetadataLen,
 	__in LONGLONG  FileSize
 	);
 

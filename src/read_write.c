@@ -4,6 +4,8 @@ int
 SifsWriteFileSize(
 	__in PFLT_INSTANCE Instance,
 	__in PFILE_OBJECT FileObject,
+	__inout PUCHAR Metadata,
+	__in  LONG MetadataLen,
 	__in LONGLONG  FileSize
 	)
 {
@@ -11,16 +13,18 @@ SifsWriteFileSize(
 	NTSTATUS status = STATUS_SUCCESS;
 	LARGE_INTEGER byteOffset;
 	ULONG writedLen = 0;
-	UCHAR buffer[sizeof(FileSize)] = { 0 };
 
 	__try{
 
 		byteOffset.QuadPart = 0;
 
-		put_unaligned_be64(FileSize, buffer);
+		put_unaligned_be64(FileSize, Metadata);
 		
-		status = FltWriteFile(Instance, FileObject, &byteOffset, sizeof(FileSize), buffer
-				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET, &writedLen, NULL, NULL);
+		status = FltWriteFile(Instance, FileObject, &byteOffset, MetadataLen, Metadata
+				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET | FLTFL_IO_OPERATION_NON_CACHED, &writedLen, NULL, NULL);
+
+		/*status = FsWriteFile(Instance, FileObject , 0, MetadataLen, Metadata
+				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET | FLTFL_IO_OPERATION_NON_CACHED, &writedLen, NULL, NULL);*/
 
 		if(NT_SUCCESS(status)) {
 
@@ -253,29 +257,33 @@ int
 SifsReadSifsMetadata(
        __in PFLT_INSTANCE Instance,
 	__in PFILE_OBJECT FileObject,
-	__inout PCRYPT_CONTEXT CryptContext
+	__inout PSTREAM_CONTEXT StreamContext
 	)
 {
 	int rc = -1;
 	
 	NTSTATUS status = STATUS_SUCCESS;
-	PCHAR buffer = ExAllocatePoolWithTag(NonPagedPool, CryptContext->MetadataSize, SIFS_METADATA_TAG);
+	PCHAR buffer = ExAllocatePoolWithTag(NonPagedPool, StreamContext->CryptContext.MetadataSize, SIFS_METADATA_TAG);
 
 	if(buffer == NULL) {
 
 		goto SifsReadSifsMetadataCleanup;
 	}
 
-	if(SifsCheckValidateSifs(Instance, FileObject, buffer, CryptContext->MetadataSize, CryptContext) == 0) {
+	if(SifsCheckValidateSifs(Instance, FileObject, buffer, StreamContext->CryptContext.MetadataSize, &(StreamContext->CryptContext)) == 0) {
 
+		StreamContext->Lower.Metadata = buffer;
 		rc = 0;
 	}
 	
 SifsReadSifsMetadataCleanup:
 
-	if(buffer != NULL) {
+	if(rc == -1) {
+		
+		if(buffer != NULL) {
 
-		ExFreePoolWithTag(buffer, SIFS_METADATA_TAG);
+			ExFreePoolWithTag(buffer, SIFS_METADATA_TAG);
+		}
 	}
 	
 	return rc;

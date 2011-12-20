@@ -257,7 +257,15 @@ typedef struct _STREAM_CONTEXT {
 	CRYPT_CONTEXT CryptContext;
        
 	LARGE_INTEGER	FileSize;
-    
+
+	struct {
+
+		HANDLE FileHandle;
+		PFILE_OBJECT FileObject;
+
+		PUCHAR Metadata;
+		LARGE_INTEGER	FileSize;
+	}Lower;
 	
 	//
 	//  Lock used to protect this context.

@@ -147,6 +147,32 @@ FsDeleteFile(
         __in PFILE_OBJECT       FileObject
         );
 
+NTSTATUS
+FsReadFile (
+    __in PFLT_INSTANCE  Instance,
+    __in PFILE_OBJECT   FileObject,
+    __in LONGLONG ByteOffset,
+    __out PVOID Buffer,
+    __in ULONG  Length,
+    __in FLT_IO_OPERATION_FLAGS Flags,
+    __out PULONG  BytesRead OPTIONAL,
+    __in PFLT_COMPLETED_ASYNC_IO_CALLBACK CallbackRoutine OPTIONAL,
+    __in PVOID  CallbackContext OPTIONAL 
+    );
+
+NTSTATUS
+FsWriteFile (
+    __in PFLT_INSTANCE  Instance,
+    __in PFILE_OBJECT  FileObject,
+    __in LONGLONG  ByteOffset,
+    __in ULONG  Length,
+    __in PVOID  Buffer,
+    __in FLT_IO_OPERATION_FLAGS  Flags,
+    __out PULONG  BytesWrite OPTIONAL,
+    __out PFLT_COMPLETED_ASYNC_IO_CALLBACK  CallbackRoutine OPTIONAL,
+    __in PVOID  CallbackContext OPTIONAL 
+    );
+
 BOOLEAN
 FsCheckFileIsDirectoryByObject(
        __in PFLT_INSTANCE    Instance,
