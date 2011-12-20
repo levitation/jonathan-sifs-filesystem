@@ -144,6 +144,10 @@ FltCleanupContext(
 
 			ExFreePoolWithTag(streamContext->Lower.Metadata, SIFS_METADATA_TAG);
 		}
+		if(streamContext->NameInfo != NULL) {
+
+			FltReleaseFileNameInformation( streamContext->NameInfo  );
+		}
 		
 		break;
 	case FLT_STREAMHANDLE_CONTEXT:
@@ -544,6 +548,13 @@ FltPostCreate(
 
     	streamContext->CryptedFile = p2pCtx->CryptedFile;
     	streamContext->FileSize = fileStandardInformation.EndOfFile;
+
+	if(streamContext->NameInfo == NULL) {
+
+		streamContext->NameInfo = nameInfo;
+
+		nameInfo = NULL;
+	}	
 			
     	//
     	//  Relinquish write acccess to the context
@@ -633,10 +644,55 @@ FLT_PREOP_CALLBACK_STATUS
 FltPreClose(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+
+	PSTREAM_CONTEXT streamContext = NULL;
+	BOOLEAN streamContextCreated = FALSE;
+	NTSTATUS status = STATUS_SUCCESS;
+
+	__try{
+
+		status = CtxFindOrCreateStreamContext(Data, 
+	                                              FALSE,
+	                                              &streamContext,
+	                                              &streamContextCreated);
+
+	        if (!NT_SUCCESS( status )) {
+
+	        	__leave;
+	        }
+
+	        FsAcquireResourceShared(streamContext->Resource);
+
+	        if(streamContext->CryptedFile == FALSE) {
+
+	            FsReleaseResource(streamContext->Resource);
+	            
+	            __leave;
+	        }	        		 
+
+		 FsReleaseResource(streamContext->Resource);
+
+#if 0
+		 if(SifsWriteFileSize(Data->Iopb->TargetInstance, &(streamContext->NameInfo->Name)
+			,streamContext->Lower.Metadata, streamContext->CryptContext.MetadataSize, streamContext->FileSize.QuadPart) == -1) {
+
+			LOG_PRINT(LOGFL_ERRORS,  ("FileFlt!FltPreClose:    Pid = %d, FileSize = %lld failed to write head.\n"
+				,  PsGetCurrentProcessId(),  streamContext->FileSize.QuadPart));
+		 }
+#endif
+		 
+	}__finally{
+
+		if(streamContext != NULL ){
+
+			FltReleaseContext(streamContext);
+		}
+	}
 
 	return retValue;
 }
@@ -1680,12 +1736,14 @@ FltPostWrite(
 			FsReleaseResource(p2pCtx->StreamContext->Resource);
 		}
 
+#if 0
 		if(SifsWriteFileSize(Cbd->Iopb->TargetInstance, Cbd->Iopb->TargetFileObject
 			,p2pCtx->StreamContext->Lower.Metadata, p2pCtx->StreamContext->CryptContext.MetadataSize, fileSize) == -1) {
 
 			LOG_PRINT(LOGFL_WRITE,  ("FileFlt!FltPostWrite:    Pid = %d, FileSize = %lld\n"
 				,  PsGetCurrentProcessId(),  fileSize));
 		 }
+#endif
 
 	}__finally{
 

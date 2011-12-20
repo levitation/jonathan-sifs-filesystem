@@ -247,10 +247,11 @@ typedef struct _CRYPT_CONTEXT{
 
 typedef struct _STREAM_CONTEXT {
 	
-	ULONG  FileSystemType;
-	
+	ULONG  FileSystemType;	
 	ULONG  VolumeDeviceType;
 
+	PFLT_FILE_NAME_INFORMATION NameInfo;
+	
 	BOOLEAN  CryptedFile;
        BOOLEAN  MetadataExist;
 

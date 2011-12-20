@@ -3,7 +3,7 @@
 int
 SifsWriteFileSize(
 	__in PFLT_INSTANCE Instance,
-	__in PFILE_OBJECT FileObject,
+	__in PUNICODE_STRING FileName,
 	__inout PUCHAR Metadata,
 	__in  LONG MetadataLen,
 	__in LONGLONG  FileSize
@@ -13,14 +13,23 @@ SifsWriteFileSize(
 	NTSTATUS status = STATUS_SUCCESS;
 	LARGE_INTEGER byteOffset;
 	ULONG writedLen = 0;
+	HANDLE fileHandle = NULL;
+	PFILE_OBJECT fileObject = NULL;
 
 	__try{
 
+		status = FsOpenFile(Instance, FileName, &fileHandle, &fileObject, NULL);
+
+		if(!NT_SUCCESS(status)) {
+
+			__leave;
+		}
+		
 		byteOffset.QuadPart = 0;
 
 		put_unaligned_be64(FileSize, Metadata);
 		
-		status = FltWriteFile(Instance, FileObject, &byteOffset, MetadataLen, Metadata
+		status = FltWriteFile(Instance, fileObject, &byteOffset, MetadataLen, Metadata
 				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET | FLTFL_IO_OPERATION_NON_CACHED, &writedLen, NULL, NULL);
 
 		/*status = FsWriteFile(Instance, FileObject , 0, MetadataLen, Metadata
@@ -33,7 +42,12 @@ SifsWriteFileSize(
 		
 	}__finally{
 
-		
+		if(fileObject != NULL) {
+
+			FsCloseFile(fileHandle, fileObject);
+		}		
+
+		DbgPrint("SifsWriteFileSize: 0x%x\n", status);
 	}
 
 

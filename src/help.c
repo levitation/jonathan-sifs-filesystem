@@ -881,7 +881,7 @@ FsOpenFile(
     status = FltCreateFile (g_FileFltContext.FileFltHandle,  
 	                Instance,  
 	                FileHandle,  
-	                GENERIC_READ,     
+	                FILE_READ_DATA|FILE_WRITE_DATA,     
 	                &objAttributes, 
 	                &ioStatusBlock, 
 	                (PLARGE_INTEGER) NULL, 

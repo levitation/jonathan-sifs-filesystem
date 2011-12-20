@@ -145,7 +145,7 @@ SifsQuickCheckValidateSifs(
 int
 SifsWriteFileSize(
 	__in PFLT_INSTANCE Instance,
-	__in PFILE_OBJECT FileObject,
+	__in PUNICODE_STRING FileName,
 	__inout PUCHAR Metadata,
 	__in LONG MetadataLen,
 	__in LONGLONG  FileSize
