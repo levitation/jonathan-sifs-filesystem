@@ -136,6 +136,18 @@ FltCleanupContext(
             		ExDeleteResourceLite( streamContext->Resource );
             		FsFreeResource( streamContext->Resource);
         	}
+		if(streamContext->Lower.FileObject != NULL) {
+
+			FsCloseFile(streamContext->Lower.FileHandle, streamContext->Lower.FileObject);
+		}
+		if(streamContext->Lower.Metadata != NULL) {
+
+			ExFreePoolWithTag(streamContext->Lower.Metadata, SIFS_METADATA_TAG);
+		}
+		if(streamContext->NameInfo != NULL) {
+
+			FltReleaseFileNameInformation( streamContext->NameInfo  );
+		}
 		
 		break;
 	case FLT_STREAMHANDLE_CONTEXT:
@@ -154,86 +166,6 @@ FltCleanupContext(
 			
 		break;
 	}   
-}
-
-static FLT_TASK_STATE
-FltGetTaskStateInPreCreate(
-	__inout PFLT_CALLBACK_DATA Data
-	)
-{
-	FLT_TASK_STATE 		taskState = FLT_TASK_STATE_UNKNOWN;
-
-	TaskGetState(PsGetCurrentProcessId(), &taskState);
-
-	return taskState;
-}
-
-static int
-FltCheckPreCreatePassthru_1(
-    __inout PFLT_CALLBACK_DATA Data,
-    __in PCFLT_RELATED_OBJECTS FltObjects
-    )
-{
-	int rc = 0;
-
-	if(FltObjects->FileObject->FileName.Length == 0) {
-		
-		goto RuleCheckPreCreatePassthru_1Cleanup;
-	}
-
-	if (FlagOn( Data->Iopb->OperationFlags, SL_OPEN_PAGING_FILE )) {
-		
-		goto RuleCheckPreCreatePassthru_1Cleanup;
-	}
-	
-	if(FlagOn( Data->Iopb->OperationFlags, SL_OPEN_TARGET_DIRECTORY)){
-		
-		goto RuleCheckPreCreatePassthru_1Cleanup;
-	}
-	
-	if (FlagOn( Data->Iopb->TargetFileObject->Flags, FO_VOLUME_OPEN )) { 
-	
-		goto RuleCheckPreCreatePassthru_1Cleanup;
-	}   
-
-	rc = -1;
-	
-RuleCheckPreCreatePassthru_1Cleanup:
-	
-
-	return rc;
-}
-
-static int
-FltCheckPreCreatePassthru_2(
-    __inout PFLT_CALLBACK_DATA Data,
-    __in PCFLT_RELATED_OBJECTS FltObjects,
-    __in PVOLUME_CONTEXT VolumeContext,
-    __in PFLT_FILE_NAME_INFORMATION NameInfo
-    )
-{
-	int rc = 0;
-	UNICODE_STRING pattern;
-
-	RtlInitUnicodeString(&pattern, L"txt");
-
-	  // 测试条件: 仅对\\Device\\HarddiskVolume3 加密
-       if((NameInfo->Volume.Length == 0)
-		|| (RtlCompareMemory(NameInfo->Volume.Buffer, L"\\Device\\HarddiskVolume3", 46) != 46)){
-
-		goto FltCheckPreCreatePassthru_2_Cleanup;
-
-	}
-	   
-	if((NameInfo->Extension.Length == 6)
-		&& (RtlCompareUnicodeString (&NameInfo->Extension,  &pattern, TRUE) == 0)) {
-		
-		rc = -1;
-	}
-
-FltCheckPreCreatePassthru_2_Cleanup:
-	
-	return rc;
 }
 
 FLT_PREOP_CALLBACK_STATUS
@@ -268,7 +200,7 @@ FltPreCreate(
 		
 	}
 
-	if(FltCheckPreCreatePassthru_1(Data, FltObjects) == 0) {
+	if(SifsCheckPreCreatePassthru_1(Data, FltObjects) == 0) {
 		
 		goto FltPreCreateCleanup;
 	}
@@ -297,14 +229,16 @@ FltPreCreate(
 		
 	}else{
 
-		if(FltCheckPreCreatePassthru_2(Data, FltObjects, VolumeContext, nameInfo) == 0) {
+		if(SifsCheckPreCreatePassthru_2(Data, FltObjects, VolumeContext, nameInfo) == 0) {
 			
 			goto FltPreCreateCleanup;
 		}
 	}	
 
-	taskState = FltGetTaskStateInPreCreate(Data);	
-	
+	taskState = SifsGetTaskStateInPreCreate(Data);	
+
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)	
+
 	SifsInitializeCryptContext(&cryptContext);
 
 	if((createDisposition == FILE_CREATE)
@@ -411,7 +345,9 @@ FltPreCreate(
                 goto FltPreCreateCleanup;
             }
        }
-	
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
 	p2pCtx = ExAllocateFromNPagedLookasideList( &VolumeContext->Pre2PostContextList );
 
 	if(p2pCtx == NULL) {
@@ -515,17 +451,20 @@ FltPostCreate(
 
        FsAcquireResourceExclusive(streamContext->Resource);
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
 	SifsInitializeCryptContext(&(streamContext->CryptContext));
 
 	if((p2pCtx->CryptedFile == TRUE)
 		&& ((streamContextCreated == TRUE)
 			|| (streamContext->CryptedFile == FALSE))) {
 
-		if(SifsReadSifsMetadata(Cbd->Iopb->TargetInstance, Cbd->Iopb->TargetFileObject, &(streamContext->CryptContext)) == -1){
+		if(SifsReadSifsMetadata(Cbd->Iopb->TargetInstance, Cbd->Iopb->TargetFileObject, streamContext) == -1){
 
 			p2pCtx->CryptedFile = FALSE;
-		}		
+		}			
 	}    	
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
 
 	//
     	//  Update the file name in the context
@@ -535,6 +474,13 @@ FltPostCreate(
 
     	streamContext->CryptedFile = p2pCtx->CryptedFile;
     	streamContext->FileSize = fileStandardInformation.EndOfFile;
+
+	if(streamContext->NameInfo == NULL) {
+
+		streamContext->NameInfo = nameInfo;
+
+		nameInfo = NULL;
+	}	
 			
     	//
     	//  Relinquish write acccess to the context
@@ -577,10 +523,45 @@ FLT_PREOP_CALLBACK_STATUS
 FltPreCleanup(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
-	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;	
+	PSTREAM_CONTEXT streamContext = NULL;
+	BOOLEAN streamContextCreated = FALSE;
+	NTSTATUS status = STATUS_SUCCESS;
+
+	__try{
+
+		status = CtxFindOrCreateStreamContext(Data, 
+	                                              FALSE,
+	                                              &streamContext,
+	                                              &streamContextCreated);
+
+	        if (!NT_SUCCESS( status )) {
+
+	        	__leave;
+	        }
+
+	        FsAcquireResourceShared(streamContext->Resource);
+
+	        if(streamContext->CryptedFile == FALSE) {
+
+	            FsReleaseResource(streamContext->Resource);
+	            
+	            __leave;
+	        }	        		 
+
+		 FsReleaseResource(streamContext->Resource);
+		 
+	}__finally{
+
+		if(streamContext != NULL ){
+
+			FltReleaseContext(streamContext);
+		}
+	}
 
 	return retValue;
 }
@@ -589,10 +570,55 @@ FLT_PREOP_CALLBACK_STATUS
 FltPreClose(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+
+	PSTREAM_CONTEXT streamContext = NULL;
+	BOOLEAN streamContextCreated = FALSE;
+	NTSTATUS status = STATUS_SUCCESS;
+
+	__try{
+
+		status = CtxFindOrCreateStreamContext(Data, 
+	                                              FALSE,
+	                                              &streamContext,
+	                                              &streamContextCreated);
+
+	        if (!NT_SUCCESS( status )) {
+
+	        	__leave;
+	        }
+
+	        FsAcquireResourceShared(streamContext->Resource);
+
+	        if(streamContext->CryptedFile == FALSE) {
+
+	            FsReleaseResource(streamContext->Resource);
+	            
+	            __leave;
+	        }	        		 
+
+		 FsReleaseResource(streamContext->Resource);
+
+#if 0
+		 if(SifsWriteFileSize(Data->Iopb->TargetInstance, &(streamContext->NameInfo->Name)
+			,streamContext->Lower.Metadata, streamContext->CryptContext.MetadataSize, streamContext->FileSize.QuadPart) == -1) {
+
+			LOG_PRINT(LOGFL_ERRORS,  ("FileFlt!FltPreClose:    Pid = %d, FileSize = %lld failed to write head.\n"
+				,  PsGetCurrentProcessId(),  streamContext->FileSize.QuadPart));
+		 }
+#endif
+		 
+	}__finally{
+
+		if(streamContext != NULL ){
+
+			FltReleaseContext(streamContext);
+		}
+	}
 
 	return retValue;
 }
@@ -641,7 +667,9 @@ FltPreRead(
         }
 
         FsReleaseResource(streamContext->Resource);
-	 
+
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
 	if(!noCache) {
 		
 		if((iopb->Parameters.Read.ByteOffset.LowPart == FILE_USE_FILE_POINTER_POSITION)
@@ -667,11 +695,10 @@ FltPreRead(
 
 			FsAcquireResourceShared(streamContext->Resource);
 
-			if(iopb->Parameters.Read.ByteOffset.QuadPart >= SifsFileValidateLength(streamContext)) {
+			if(iopb->Parameters.Read.ByteOffset.QuadPart >= SifsValidateFileSize(streamContext)) {
 
 				FsReleaseResource(streamContext->Resource);
 
-				DbgPrint("Read(1): -----------%d, %d\n", iopb->Parameters.Read.ByteOffset.QuadPart, SifsFileValidateLength(streamContext));
 				Data->IoStatus.Status = STATUS_END_OF_FILE ;
 				Data->IoStatus.Information = 0;		
 
@@ -842,6 +869,8 @@ FltPreRead(
         //
 
         retValue = FLT_PREOP_SUCCESS_WITH_CALLBACK;
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
         
     }__finally{
 
@@ -925,9 +954,9 @@ FltPostRead(
 	                
 	            }else{
 
-	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsFileValidateLength(p2pCtx->StreamContext)) {
+	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsValidateFileSize(p2pCtx->StreamContext)) {
 
-	                    Data->IoStatus.Information = SifsFileValidateLength(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
+	                    Data->IoStatus.Information = SifsValidateFileSize(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
 	                }	                
 	            }
 	     	}
@@ -1215,9 +1244,9 @@ Return Value:
 	                
 	            }else{
 
-	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsFileValidateLength(p2pCtx->StreamContext)) {
+	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsValidateFileSize(p2pCtx->StreamContext)) {
 
-	                    Data->IoStatus.Information = SifsFileValidateLength(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
+	                    Data->IoStatus.Information = SifsValidateFileSize(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
 	                }	                
 	            }
 		 	
@@ -1296,6 +1325,8 @@ FltPreWrite(
             }
 
             FsReleaseResource(streamContext->Resource);
+
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
 
 	     if(!(Data->Iopb->IrpFlags & (IRP_NOCACHE | IRP_PAGING_IO | IRP_SYNCHRONOUS_PAGING_IO))) {
 
@@ -1534,7 +1565,9 @@ FltPreWrite(
             p2pCtx->VolCtx = VolumeContext;
             p2pCtx->StreamContext = streamContext;
 
-            *CompletionContext = p2pCtx;           
+            *CompletionContext = p2pCtx;       
+			
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
             
     }__finally{
 
@@ -1636,16 +1669,30 @@ FltPostWrite(
 
 			FsReleaseResource(p2pCtx->StreamContext->Resource);
 		}
-		
+
+#if 0
+		if(SifsWriteFileSize(Cbd->Iopb->TargetInstance, Cbd->Iopb->TargetFileObject
+			,p2pCtx->StreamContext->Lower.Metadata, p2pCtx->StreamContext->CryptContext.MetadataSize, fileSize) == -1) {
+
+			LOG_PRINT(LOGFL_WRITE,  ("FileFlt!FltPostWrite:    Pid = %d, FileSize = %lld\n"
+				,  PsGetCurrentProcessId(),  fileSize));
+		 }
+#endif
+
 	}__finally{
 
 		
 	}			
     }else{
-    
 	    
+	    //
+	    //  Free allocate POOL and volume context
+	    //
 
-	    LOG_PRINT( LOGFL_WRITE,
+	    ExFreePool( p2pCtx->SwappedBuffer );	    
+    }
+
+     LOG_PRINT( LOGFL_WRITE,
 	               ("FileFlt!FltPostWrite:    Pid = %d %wZ newB=%p status = 0x%x info=%d byteOffset = %lld fileSize = %lld Freeing\n",
 	               PsGetCurrentProcessId(),
 	                &p2pCtx->VolCtx->VolumeName,
@@ -1654,14 +1701,7 @@ FltPostWrite(
 	                Cbd->IoStatus.Information,
 	                Cbd->Iopb->Parameters.Write.ByteOffset.QuadPart,
 	                p2pCtx->StreamContext->FileSize.QuadPart) );
-
-	    //
-	    //  Free allocate POOL and volume context
-	    //
-
-	    ExFreePool( p2pCtx->SwappedBuffer );	    
-    }
-
+	 
     FltReleaseContext( p2pCtx->StreamContext );
 
     ExFreeToNPagedLookasideList( &volumeContext->Pre2PostContextList,
@@ -1739,13 +1779,15 @@ FltPreQueryInformation (
     __deref_out_opt PVOID *CompletionContext
     )
 {
-	FLT_PREOP_CALLBACK_STATUS 	retValue = FLT_PREOP_SYNCHRONIZE;
+	FLT_PREOP_CALLBACK_STATUS 	retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
 	NTSTATUS status = STATUS_SUCCESS;
 	PSTREAM_CONTEXT streamContext = NULL;
 	BOOLEAN streamContextCreated = FALSE;
 	FILE_INFORMATION_CLASS fileInformationClass = Data->Iopb->Parameters.QueryFileInformation.FileInformationClass ;	
 	
 	__try{
+
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB )
 
               if((fileInformationClass == FileAllInformation) || 
 			(fileInformationClass == FileAllocationInformation) ||
@@ -1761,10 +1803,10 @@ FltPreQueryInformation (
 
 				__leave;
 			}
+
+			retValue = FLT_PREOP_SYNCHRONIZE;
 			
 		}else{
-
-			retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
 
                      __leave;
 		}
@@ -1788,6 +1830,9 @@ FltPreQueryInformation (
 		}	
 
 		FsReleaseResource(streamContext->Resource);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
 		
 	}__finally{
 
@@ -1970,7 +2015,9 @@ FltPreSetInformation(
 
 	__try{
 
-	     if(FltGetTaskStateInPreCreate(Data)  == FLT_TASK_STATE_SYSTEM) {
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
+	     if(SifsGetTaskStateInPreCreate(Data)  == FLT_TASK_STATE_SYSTEM) {
 
 			__leave;
 	     }
@@ -2066,6 +2113,8 @@ FltPreSetInformation(
               FltSetCallbackDataDirty(Data);
 
               FsReleaseResource(streamContext->Resource);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
 	
 	}__finally{
 
@@ -2102,6 +2151,10 @@ FltPreNetworkQueryOpen(
     )
 {
 	FLT_PREOP_CALLBACK_STATUS 	retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
+#if 0
 	PFLT_FILE_NAME_INFORMATION 	nameInfo = NULL;
 	NTSTATUS status = STATUS_SUCCESS;
 	CRYPT_CONTEXT cryptContext ;
@@ -2140,6 +2193,14 @@ FltPreNetworkQueryOpenCleanup:
 			retValue = FLT_PREOP_DISALLOW_FASTIO;
 		}
 	}
+#endif
+
+	if(FLT_IS_FASTIO_OPERATION(Data)) {
+
+		retValue = FLT_PREOP_DISALLOW_FASTIO;
+	}
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
 
 	return retValue;
 }
@@ -2231,7 +2292,7 @@ FltCheckValidateSifs(
 
 			if(FsCheckFileIsDirectoryByObject(Instance, fileObject) == FALSE) {
 				
-				rc = SifsCheckValidateSifs(Instance, fileObject, PageVirt, PageVirtLen);
+				rc = SifsQuickCheckValidateSifs(Instance, fileObject, PageVirt, PageVirtLen);
 			}
 
 			FsCloseFile(fileHandle, fileObject);
@@ -2484,6 +2545,14 @@ FltPreDirCtrlBuffers(
 
     try {        
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
+	if((VolumeContext->FileSystemType == FLT_FSTYPE_LANMAN)
+		&& (SifsGetTaskStateInPreCreate(Data) != FLT_TASK_STATE_EXPLORE_HOOK)){
+
+		__leave;
+	}
+	
 	if(!((fileInformationClass == FileBothDirectoryInformation)
 			|| (fileInformationClass == FileDirectoryInformation)
 			|| (fileInformationClass == FileFullDirectoryInformation)
@@ -2618,6 +2687,9 @@ FltPreDirCtrlBuffers(
 
         //retValue = FLT_PREOP_SUCCESS_WITH_CALLBACK;
         retValue = FLT_PREOP_SYNCHRONIZE;
+		
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
 
     } finally {
 

@@ -17,11 +17,12 @@
 #define LOGFL_CREATE		0x00000008  // if set, display CREATE operation info
 #define LOGFL_READ			0x00000010  // if set, display READ operation info
 #define LOGFL_WRITE			0x00000020  // if set, display WRITE operation info
-#define LOGFL_TASK			0x00000040
-#define LOGFL_REMOTE		0x00000080
-#define LOGFL_TASK_RULE	0x00000100
-#define LOGFL_VOLUME_RULE	0x00000200
-#define LOGFL_DIRCTRL		0x00000400
+#define LOGFL_CLOSE			0x00000040
+#define LOGFL_TASK			0x00000080
+#define LOGFL_REMOTE		0x00000100
+#define LOGFL_TASK_RULE	0x00000200
+#define LOGFL_VOLUME_RULE	0x00000400
+#define LOGFL_DIRCTRL		0x00000800
 
 
 #define LOG_PRINT( _logFlag, _string )                              \

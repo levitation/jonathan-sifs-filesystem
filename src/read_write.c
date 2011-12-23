@@ -1,6 +1,60 @@
 #include "fileflt.h"
 
 int
+SifsWriteFileSize(
+	__in PFLT_INSTANCE Instance,
+	__in PUNICODE_STRING FileName,
+	__inout PUCHAR Metadata,
+	__in  LONG MetadataLen,
+	__in LONGLONG  FileSize
+	)
+{
+	int rc = -1;
+	NTSTATUS status = STATUS_SUCCESS;
+	LARGE_INTEGER byteOffset;
+	ULONG writedLen = 0;
+	HANDLE fileHandle = NULL;
+	PFILE_OBJECT fileObject = NULL;
+
+	__try{
+
+		status = FsOpenFile(Instance, FileName, &fileHandle, &fileObject, NULL);
+
+		if(!NT_SUCCESS(status)) {
+
+			__leave;
+		}
+		
+		byteOffset.QuadPart = 0;
+
+		put_unaligned_be64(FileSize, Metadata);
+		
+		status = FltWriteFile(Instance, fileObject, &byteOffset, MetadataLen, Metadata
+				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET | FLTFL_IO_OPERATION_NON_CACHED, &writedLen, NULL, NULL);
+
+		/*status = FsWriteFile(Instance, FileObject , 0, MetadataLen, Metadata
+				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET | FLTFL_IO_OPERATION_NON_CACHED, &writedLen, NULL, NULL);*/
+
+		if(NT_SUCCESS(status)) {
+
+			rc = 0;
+		}
+		
+	}__finally{
+
+		if(fileObject != NULL) {
+
+			FsCloseFile(fileHandle, fileObject);
+		}		
+
+		DbgPrint("SifsWriteFileSize: 0x%x\n", status);
+	}
+
+
+	return rc;
+}
+
+int
 SifsWriteSifsMetadata(
         __in PFLT_INSTANCE        Instance,
         __in ULONG                     DesiredAccess,
@@ -25,6 +79,7 @@ SifsWriteSifsMetadata(
 	if(NT_SUCCESS(status)) {
 
               ULONG writeLen = 0;
+		ULONG writedLen = 0;
               LARGE_INTEGER byteOffset;
 		PCHAR buffer = ExAllocatePoolWithTag(NonPagedPool, CryptContext->MetadataSize, SIFS_METADATA_TAG);
 
@@ -34,24 +89,29 @@ SifsWriteSifsMetadata(
               }
 
               RtlZeroMemory(buffer, CryptContext->MetadataSize);
-		buffer[0] = '1';
+
+		if(SifsWriteHeadersVirt(buffer, CryptContext->MetadataSize, &writeLen, CryptContext) == -1){
+
+			goto SifsWriteSifsMetadataCloseFile;
+		}
 
               byteOffset.QuadPart = 0;
-
                 
         	status = FltWriteFile(Instance, fileObject, &byteOffset, CryptContext->MetadataSize, buffer
-        				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET | FLTFL_IO_OPERATION_NON_CACHED, &writeLen, NULL, NULL );
+        				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET | FLTFL_IO_OPERATION_NON_CACHED, &writedLen, NULL, NULL );
               
-		if(NT_SUCCESS(status)
-                    && (writeLen == CryptContext->MetadataSize)) {
+		if(NT_SUCCESS(status)) {
 
 			rc = 0;
 		}
         
-              ExFreePoolWithTag(buffer, SIFS_METADATA_TAG);
 
  SifsWriteSifsMetadataCloseFile:
 
+		if(buffer != NULL) {
+
+			ExFreePoolWithTag(buffer, SIFS_METADATA_TAG);
+		}
               if(rc == -1) {
 
                     FsDeleteFile(Instance, fileObject);
@@ -69,8 +129,40 @@ SifsWriteSifsMetadataCleanup:
 	return rc;
 }
 
-int
+static int
 SifsCheckValidateSifs(
+	__in PFLT_INSTANCE Instance,
+	__in PFILE_OBJECT FileObject,
+	__out PUCHAR  PageVirt,
+	__in LONG PageVirtLen,
+	__inout PCRYPT_CONTEXT CryptContext
+	)
+{
+	int rc = -1;
+
+       NTSTATUS status = STATUS_SUCCESS;
+       LARGE_INTEGER byteOffset;
+       ULONG readLen = 0;
+
+	RtlZeroMemory(PageVirt, PageVirtLen);
+       byteOffset.QuadPart = 0;
+
+       status = FltReadFile(Instance, FileObject, &byteOffset, PageVirtLen, PageVirt
+				, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET | FLTFL_IO_OPERATION_NON_CACHED, &readLen, NULL, NULL );
+
+	  if(NT_SUCCESS(status)) {
+
+		if(SifsReadHeadersVirt(PageVirt, CryptContext, SIFS_VALIDATE_HEADER_SIZE) == 0) {
+
+			rc = 0;
+		}
+	  }  
+
+	return rc;
+}
+
+int
+SifsQuickCheckValidateSifs(
 	__in PFLT_INSTANCE Instance,
 	__in PFILE_OBJECT FileObject,
 	__out PUCHAR  PageVirt,
@@ -91,7 +183,7 @@ SifsCheckValidateSifs(
 
 	  if(NT_SUCCESS(status)) {
 
-		if(PageVirt[0] == '1') {
+		if(SifsQuickCheckValidate_i(PageVirt) == 0) {
 
 			rc = 0;
 		}
@@ -99,6 +191,7 @@ SifsCheckValidateSifs(
 
 	return rc;
 }
+
 
 int
 SifsQuickCheckValidate(
@@ -154,7 +247,7 @@ SifsQuickCheckValidate(
 		goto SifsQuickCheckValidateCleanup;
 	}
 
-	if(SifsCheckValidateSifs(Instance, fileObject, buffer, bufferLen) == 0) {
+	if(SifsQuickCheckValidateSifs(Instance, fileObject, buffer, bufferLen) == 0) {
 
 		rc = 0;
 	}
@@ -178,29 +271,33 @@ int
 SifsReadSifsMetadata(
        __in PFLT_INSTANCE Instance,
 	__in PFILE_OBJECT FileObject,
-	__inout PCRYPT_CONTEXT CryptContext
+	__inout PSTREAM_CONTEXT StreamContext
 	)
 {
 	int rc = -1;
 	
 	NTSTATUS status = STATUS_SUCCESS;
-	PCHAR buffer = ExAllocatePoolWithTag(NonPagedPool, CryptContext->MetadataSize, SIFS_METADATA_TAG);
+	PCHAR buffer = ExAllocatePoolWithTag(NonPagedPool, StreamContext->CryptContext.MetadataSize, SIFS_METADATA_TAG);
 
 	if(buffer == NULL) {
 
 		goto SifsReadSifsMetadataCleanup;
 	}
 
-	if(SifsCheckValidateSifs(Instance, FileObject, buffer, CryptContext->MetadataSize) == 0) {
+	if(SifsCheckValidateSifs(Instance, FileObject, buffer, StreamContext->CryptContext.MetadataSize, &(StreamContext->CryptContext)) == 0) {
 
+		StreamContext->Lower.Metadata = buffer;
 		rc = 0;
 	}
 	
 SifsReadSifsMetadataCleanup:
 
-	if(buffer != NULL) {
+	if(rc == -1) {
+		
+		if(buffer != NULL) {
 
-		ExFreePoolWithTag(buffer, SIFS_METADATA_TAG);
+			ExFreePoolWithTag(buffer, SIFS_METADATA_TAG);
+		}
 	}
 	
 	return rc;

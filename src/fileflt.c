@@ -234,8 +234,15 @@ Return Value:
 
 	RtlZeroMemory(ctx,  VOLUME_CONTEXT_SIZE);
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
+
+	status = SifsInstanceSetup(FltObjects, Flags, VolumeDeviceType, VolumeFilesystemType, ctx);
+#else
+
 	status = FltInstanceSetup(FltObjects, Flags, VolumeDeviceType, VolumeFilesystemType, ctx);
-	
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
+
        if(!NT_SUCCESS(status)) {		
 		
 		leave;
@@ -304,7 +311,14 @@ Return Value:
 {	
 	PAGED_CODE();
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
+
+	SifsCleanupContext(Context, ContextType);
+#else
+
 	FltCleanupContext(Context, ContextType);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
 	
 }
 
@@ -418,7 +432,8 @@ Return Value:
 
         FltUnregisterFilter( g_FileFltContext.FileFltHandle );
         goto SwapDriverEntryExit;
-    }
+    }  
+
 
 SwapDriverEntryExit:
 
@@ -515,25 +530,26 @@ Return Value:
     PAGED_CODE();
 	
     try {	
-	
-	// only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
+
+	status = FltGetVolumeContext( FltObjects->Filter,
+	                          FltObjects->Volume,
+	                          &volCtx );
+
+	if (!NT_SUCCESS(status)) {
+	    
+	    leave;
+	}
+			
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
+
+    	// only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
 	
     	retValue = SifsPreCreate(Data, FltObjects, CompletionContext, volCtx);
-    
-	if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK) {
+#else
+	
+      	retValue = FltPreCreate(Data, FltObjects, CompletionContext, volCtx);
 
-            status = FltGetVolumeContext( FltObjects->Filter,
-                                      FltObjects->Volume,
-                                      &volCtx );
-
-            if (!NT_SUCCESS(status)) {
-                
-                leave;
-            }
-
-
-	     retValue = FltPreCreate(Data, FltObjects, CompletionContext, volCtx);
-	}
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
 	
     }finally{
 
@@ -556,7 +572,11 @@ SwapPostCreate(
 {
 	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
 	retValue = FltPostCreate(Cbd, FltObjects, CbdContext, Flags);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
 
 	return retValue;
 }
@@ -595,18 +615,43 @@ Return Value:
 {
     PFLT_IO_PARAMETER_BLOCK iopb = Data->Iopb;
     FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+    PVOLUME_CONTEXT volumeContext = NULL;
+    NTSTATUS status = STATUS_SUCCESS;
 
     PAGED_CODE();
+
+    status = FltGetVolumeContext( FltObjects->Filter,
+                                      FltObjects->Volume,
+                                      &volumeContext );
+
+     if (!NT_SUCCESS(status)) {
+
+        LOG_PRINT( LOGFL_ERRORS,
+                   ("FileFlt!SwapPreCleanup:          Error getting volume context, status=%x\n",
+                    status) );
+
+         goto SwapPreCleanup_out;
+     }
+			 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
 
     // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
     
     retValue = SifsPreCleanup(Data, FltObjects, CompletionContext);
+
+#else
+
+   retValue = FltPreCleanup(Data, FltObjects, CompletionContext, volumeContext);
     
-    if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK){
-		
-    	retValue = FltPreCleanup(Data, FltObjects, CompletionContext);
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
+
+SwapPreCleanup_out:
+	
+    if(volumeContext != NULL ){
+
+		FltReleaseContext(volumeContext);
     }
-    
+	
     return retValue;
 }
 
@@ -644,18 +689,43 @@ Return Value:
 {
     PFLT_IO_PARAMETER_BLOCK iopb = Data->Iopb;
     FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+    PVOLUME_CONTEXT volumeContext = NULL;
+    NTSTATUS status = STATUS_SUCCESS;
 
     PAGED_CODE();
+
+    status = FltGetVolumeContext( FltObjects->Filter,
+                                      FltObjects->Volume,
+                                      &volumeContext );
+
+     if (!NT_SUCCESS(status)) {
+
+        LOG_PRINT( LOGFL_ERRORS,
+                   ("FileFlt!SwapPreClose:          Error getting volume context, status=%x\n",
+                    status) );
+
+         goto SwapPreClose_out;
+     }
+		 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
 
     // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
     
     retValue = SifsPreClose(Data, FltObjects, CompletionContext);
-    
-    if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK){
-		
-    	retValue = FltPreClose(Data, FltObjects, CompletionContext);
+
+#else	 
+		 
+    retValue = FltPreClose(Data, FltObjects, CompletionContext, volumeContext);
+		  
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
+
+SwapPreClose_out:
+	
+    if(volumeContext != NULL ){
+
+		FltReleaseContext(volumeContext);
     }
-    
+	
     return retValue;
 }
 
@@ -699,33 +769,35 @@ Return Value:
 
     PAGED_CODE();
 
+    if(readLen == 0) {
+
+        goto SwapPreReadCleanup;
+    }
+
+    status = FltGetVolumeContext( FltObjects->Filter,
+	                      FltObjects->Volume,
+	                      &volumeContext );
+
+    if (!NT_SUCCESS(status)) {
+
+	LOG_PRINT( LOGFL_ERRORS,
+	           ("FileFlt!SwapPreRead:          Error getting volume context, status=%x\n",
+	            status) );
+
+	 goto SwapPreReadCleanup;
+    }
+			 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
+
     // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
     
     retValue = SifsPreRead(Data, FltObjects, CompletionContext);
-    
-    if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK) {
 
+#else
 
-		if(readLen == 0) {
+    retValue = FltPreRead(Data, FltObjects, CompletionContext, volumeContext);
 
-			goto SwapPreReadCleanup;
-		}
-        
-		status = FltGetVolumeContext( FltObjects->Filter,
-                                      FltObjects->Volume,
-                                      &volumeContext );
-
-             if (!NT_SUCCESS(status)) {
-
-                LOG_PRINT( LOGFL_ERRORS,
-                           ("FileFlt!SwapPreRead:          Error getting volume context, status=%x\n",
-                            status) );
-
-                 goto SwapPreReadCleanup;
-             }
-
-    		retValue = FltPreRead(Data, FltObjects, CompletionContext, volumeContext);
-    }
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
 
 SwapPreReadCleanup:
 
@@ -747,7 +819,11 @@ SwapPostRead(
 {
     FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB )
+
     retValue = FltPostRead(Cbd, FltObjects, CbdContext, Flags);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
     		
     return retValue;
 }
@@ -792,32 +868,35 @@ Return Value:
 
     PAGED_CODE();
 
-    // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
-    
-    retValue = SifsPreWrite(Data, FltObjects, CompletionContext);
-    
-    if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK) {
-
-         if (writeLen == 0) {
+    if (writeLen == 0) {
 
             goto SwapPreWriteCleanup;
-         }
+    }
 
-         status = FltGetVolumeContext( FltObjects->Filter,
+    status = FltGetVolumeContext( FltObjects->Filter,
                                       FltObjects->Volume,
                                       &volumeContext );
 
-         if (!NT_SUCCESS(status)) {
+    if (!NT_SUCCESS(status)) {
 
             LOG_PRINT( LOGFL_ERRORS,
                        ("FileFlt!SwapPreWrite:          Error getting volume context, status=%x\n",
                         status) );
 
              goto SwapPreWriteCleanup;
-         }
-             
-    	  retValue = FltPreWrite(Data, FltObjects, CompletionContext, volumeContext);
     }
+		 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB )
+
+    // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
+    
+    retValue = SifsPreWrite(Data, FltObjects, CompletionContext);
+
+#else        
+             
+    retValue = FltPreWrite(Data, FltObjects, CompletionContext, volumeContext);
+	
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
 
  SwapPreWriteCleanup:
 
@@ -839,7 +918,11 @@ SwapPostWrite(
 {
     FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB )
+
     retValue = FltPostWrite(Cbd, FltObjects, CbdContext, Flags);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
     		
     return retValue;
 }
@@ -855,14 +938,16 @@ SwapPreQueryInformation (
 
 	PAGED_CODE();
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
+
 	// only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
     
 	retValue = SifsPreQueryInformation(Data, FltObjects, CompletionContext);
+#else
 
-	if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK) {
-		
-		retValue = FltPreQueryInformation(Data, FltObjects, CompletionContext);
-	}
+	retValue = FltPreQueryInformation(Data, FltObjects, CompletionContext);
+	
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
 
 	return retValue;
 }
@@ -877,8 +962,12 @@ SwapPostQueryInformation (
 {
 	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
 	retValue = FltPostQueryInformation(Data, FltObjects, CompletionContext, Flags);
-    		
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
 	return retValue;
 }
 
@@ -918,14 +1007,17 @@ Return Value:
 
     PAGED_CODE();
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
+
    // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
    
     retValue = SifsPreSetInformation(Data, FltObjects, CompletionContext);
-    
-    if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK){
-    			
-    		retValue = FltPreSetInformation(Data, FltObjects, CompletionContext);
-    }
+
+#else
+
+    retValue = FltPreSetInformation(Data, FltObjects, CompletionContext);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
     
     return retValue;
 }
@@ -940,8 +1032,12 @@ SwapPostSetInformation (
 {
     FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
     retValue = FltPostSetInformation(Cbd, FltObjects, CbdContext, Flags);
-    
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+	
     return retValue;
 }
 
@@ -983,27 +1079,30 @@ Return Value:
 
     PAGED_CODE();
 
-   // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
-   
-    retValue = SifsPreNetworkQueryOpen(Data, FltObjects, CompletionContext);
-    
-    if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK){
-
-		status = FltGetVolumeContext( FltObjects->Filter,
+    status = FltGetVolumeContext( FltObjects->Filter,
                                       FltObjects->Volume,
                                       &volumeContext );
 
-             if (!NT_SUCCESS(status)) {
+     if (!NT_SUCCESS(status)) {
 
-                LOG_PRINT( LOGFL_ERRORS,
-                           ("FileFlt!SwapPreNetworkQueryOpen:          Error getting volume context, status=%x\n",
-                            status) );
+        LOG_PRINT( LOGFL_ERRORS,
+                   ("FileFlt!SwapPreNetworkQueryOpen:          Error getting volume context, status=%x\n",
+                    status) );
 
-                 goto SwapPreNetworkQueryOpenCleanup;
-             }
+         goto SwapPreNetworkQueryOpenCleanup;
+     }
+			 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
 
-    		retValue = FltPreNetworkQueryOpen(Data, FltObjects, CompletionContext, volumeContext);
-    }
+   // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
+   
+    retValue = SifsPreNetworkQueryOpen(Data, FltObjects, CompletionContext);
+
+#else
+
+    retValue = FltPreNetworkQueryOpen(Data, FltObjects, CompletionContext, volumeContext);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
 
 SwapPreNetworkQueryOpenCleanup:
 
@@ -1025,7 +1124,11 @@ SwapPostNetworkQueryOpen (
 {
     FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
     retValue = FltPostNetworkQueryOpen(Cbd, FltObjects, CbdContext, Flags);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
     
     return retValue;
 }
@@ -1068,60 +1171,54 @@ Return Value:
 --*/
 {    
     FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+     PFLT_IO_PARAMETER_BLOCK iopb = Data->Iopb;
     PVOLUME_CONTEXT volumeContext = NULL;
+     NTSTATUS status = STATUS_SUCCESS;
 
     PAGED_CODE();
+
+    //
+    //  If they are trying to get ZERO bytes, then don't do anything and
+    //  we don't need a post-operation callback.
+    //
+
+    if (iopb->Parameters.DirectoryControl.QueryDirectory.Length == 0) {
+
+        goto SwapPreDirCtrlBuffersCleanup;
+    }
+
+    if(iopb->MinorFunction != IRP_MN_QUERY_DIRECTORY) {
+
+       goto SwapPreDirCtrlBuffersCleanup;
+    }
+
+    //
+    //  Get our volume context.  If we can't get it, just return.
+    //
+
+    status = FltGetVolumeContext( FltObjects->Filter,
+                                  FltObjects->Volume,
+                                  &volumeContext );
+
+    if (!NT_SUCCESS(status)) {
+
+        LOG_PRINT( LOGFL_ERRORS,
+                   ("FileFlt!SwapPreDirCtrlBuffers:          Error getting volume context, status=%x\n",
+                    status) );
+
+         goto SwapPreDirCtrlBuffersCleanup;
+    }
+
+
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
 
    // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
    
     retValue = SifsPreDirCtrlBuffers(Data, FltObjects, CompletionContext);
+#else
 
-    if(retValue == FLT_PREOP_SUCCESS_NO_CALLBACK){
-
-        NTSTATUS status = STATUS_SUCCESS;
-		
-        PFLT_IO_PARAMETER_BLOCK iopb = Data->Iopb;	 
-		
-        //
-        //  If they are trying to get ZERO bytes, then don't do anything and
-        //  we don't need a post-operation callback.
-        //
-
-        if (iopb->Parameters.DirectoryControl.QueryDirectory.Length == 0) {
-
-            goto SwapPreDirCtrlBuffersCleanup;
-        }
-
-	 if(iopb->MinorFunction != IRP_MN_QUERY_DIRECTORY) {
-
-	     goto SwapPreDirCtrlBuffersCleanup;
-	 }
-
-	 if(Data->RequestorMode == KernelMode) {
-
-		goto SwapPreDirCtrlBuffersCleanup;
-	 }
-
-	 //
-        //  Get our volume context.  If we can't get it, just return.
-        //
-
-        status = FltGetVolumeContext( FltObjects->Filter,
-                                      FltObjects->Volume,
-                                      &volumeContext );
-
-        if (!NT_SUCCESS(status)) {
-
-            LOG_PRINT( LOGFL_ERRORS,
-                       ("FileFlt!SwapPreDirCtrlBuffers:          Error getting volume context, status=%x\n",
-                        status) );
-
-             goto SwapPreDirCtrlBuffersCleanup;
-        }
-
-
-    	 retValue = FltPreDirCtrlBuffers(Data, FltObjects, CompletionContext, volumeContext);
-    }
+    retValue = FltPreDirCtrlBuffers(Data, FltObjects, CompletionContext, volumeContext);
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
 
 SwapPreDirCtrlBuffersCleanup:
 
@@ -1169,8 +1266,12 @@ Return Value:
 {
     FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
 
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
     retValue = FltPostDirCtrlBuffers(Data, FltObjects, CompletionContext, Flags);
-    
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
     return retValue;
 }
 

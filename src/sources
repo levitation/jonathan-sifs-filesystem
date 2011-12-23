@@ -33,5 +33,13 @@ SOURCES=fileflt.c   \
 	 crypto.c \
 	 module.c \
 	 keystore.c \
+	 misc.c \
+	 create.c \
+	 memory.c \
+	 except.c \
+	 read.c \
+	 block.c \
+	 fileinfo.c \
+	 dirctl.c \
         fileflt.rc
 

@@ -6,6 +6,15 @@
 #include <suppress.h>
 #include "control.h"
 
+#define FLT_NO    0x00
+#define FLT_YES  0x01
+
+#define FLT_FRAMEWORK_TYPE_DOUBLE_FCB FLT_YES
+#define FLT_FRAMEWORK_TYPE_SINGLE_FCB FLT_YES
+#define FLT_FRAMEWORK_TYPE_FILTER         FLT_YES
+
+#define FLT_FRAMEWORK_TYPE_USED   FLT_FRAMEWORK_TYPE_DOUBLE_FCB
+
 #define FLT_MEMORY_TAG			   	'mfTF'
 #define VOLUME_CONTEXT_TAG  		'cvTF'
 #define STREAM_CONTEXT_TAG  		'csTF'
@@ -133,23 +142,16 @@ typedef struct _FILEFLT_CONTEXT {
 	
 	ULONG 		LoggingFlags;
 	ULONG           Status;
-	
-	//
-	//  Listens for incoming connections
-	//
+
+	NPAGED_LOOKASIDE_LIST       SifsIrpContextLookasideList;
+	NPAGED_LOOKASIDE_LIST       SifsFcbLookasideList;
+	PAGED_LOOKASIDE_LIST        SifsCcbLookasideList;
+	PAGED_LOOKASIDE_LIST        SifsMcbLookasideList;
+	PAGED_LOOKASIDE_LIST        SifsExtLookasideList;
+	PAGED_LOOKASIDE_LIST        SifsDentryLookasideList;
 
 	PFLT_PORT ServerPort;
-
-	//
-	//  User process that connected to the port
-	//
-
 	PEPROCESS UserProcess;
-
-	//
-	//  Client port for a connection to user-mode
-	//
-
 	PFLT_PORT ClientPort;
 	
 }FILEFLT_CONTEXT;
@@ -167,10 +169,11 @@ typedef struct _VOLUME_CONTEXT {
     //  Holds the sector size for this volume.
     //
 
+    ULONG  Flags;
+	
     ULONG SectorSize;
 
     ULONG DeviceType;
-
     FLT_FILESYSTEM_TYPE FileSystemType;
 
     NPAGED_LOOKASIDE_LIST Pre2PostContextList;
@@ -178,7 +181,44 @@ typedef struct _VOLUME_CONTEXT {
     WCHAR 			VolumeNameBuffer[DEVICE_NAME_MAX_LENGTH];
     UNICODE_STRING 	VolumeName;
 
+    ERESOURCE             McbLock;
+    LIST_ENTRY		McbList;
+    ULONG                     NumOfMcb;   
+
+    ULONG                       ReferenceCount;     /* total ref count */
+    ULONG                       OpenHandleCount;    /* all handles */
+
+
+    // List of IRPs pending on directory change notify requests
+    LIST_ENTRY                  NotifyList;
+
+    // Pointer to syncronization primitive for this list
+    PNOTIFY_SYNC                NotifySync;
+
+    ERESOURCE 		MainResource;
 } VOLUME_CONTEXT, *PVOLUME_CONTEXT;
+
+#define VCB_INITIALIZED         0x00000001
+#define VCB_VOLUME_LOCKED       0x00000002
+#define VCB_MOUNTED             0x00000004
+#define VCB_DISMOUNT_PENDING    0x00000008
+#define VCB_NEW_VPB             0x00000010
+#define VCB_BEING_CLOSED        0x00000020
+
+#define VCB_DEVICE_REMOVED      0x00008000
+#define VCB_JOURNAL_RECOVER     0x00080000
+#define VCB_ARRIVAL_NOTIFIED    0x00800000
+#define VCB_READ_ONLY           0x08000000
+#define VCB_WRITE_PROTECTED     0x10000000
+#define VCB_FLOPPY_DISK         0x20000000
+#define VCB_REMOVAL_PREVENTED   0x40000000
+#define VCB_REMOVABLE_MEDIA     0x80000000
+
+
+#define IsVcbInited(Vcb)   (IsFlagOn((Vcb)->Flags, VCB_INITIALIZED))
+#define IsMounted(Vcb)     (IsFlagOn((Vcb)->Flags, VCB_MOUNTED))
+#define IsDispending(Vcb)  (IsFlagOn((Vcb)->Flags, VCB_DISMOUNT_PENDING))
+
 
 #define VOLUME_CONTEXT_SIZE         sizeof( VOLUME_CONTEXT )
 #define MIN_SECTOR_SIZE 0x200
@@ -247,17 +287,26 @@ typedef struct _CRYPT_CONTEXT{
 
 typedef struct _STREAM_CONTEXT {
 	
-	ULONG  FileSystemType;
-	
+	ULONG  FileSystemType;	
 	ULONG  VolumeDeviceType;
 
+	PFLT_FILE_NAME_INFORMATION NameInfo;
+	
 	BOOLEAN  CryptedFile;
        BOOLEAN  MetadataExist;
 
 	CRYPT_CONTEXT CryptContext;
        
 	LARGE_INTEGER	FileSize;
-    
+
+	struct {
+
+		HANDLE FileHandle;
+		PFILE_OBJECT FileObject;
+
+		PUCHAR Metadata;
+		LARGE_INTEGER	FileSize;
+	}Lower;
 	
 	//
 	//  Lock used to protect this context.
@@ -474,9 +523,9 @@ ReadDriverParameters (
     );
 
 #include "debug.h"
-#include "sifs.h"
-#include "filter.h"
 #include "help.h"
+#include "filter.h"
+#include "sifs.h"
 
 extern int module_init(void);
 extern void module_exit(void);
