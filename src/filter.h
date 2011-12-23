@@ -110,14 +110,16 @@ FLT_PREOP_CALLBACK_STATUS
 FltPreCleanup(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_PREOP_CALLBACK_STATUS
 FltPreClose(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_PREOP_CALLBACK_STATUS

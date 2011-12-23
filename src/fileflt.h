@@ -247,17 +247,26 @@ typedef struct _CRYPT_CONTEXT{
 
 typedef struct _STREAM_CONTEXT {
 	
-	ULONG  FileSystemType;
-	
+	ULONG  FileSystemType;	
 	ULONG  VolumeDeviceType;
 
+	PFLT_FILE_NAME_INFORMATION NameInfo;
+	
 	BOOLEAN  CryptedFile;
        BOOLEAN  MetadataExist;
 
 	CRYPT_CONTEXT CryptContext;
        
 	LARGE_INTEGER	FileSize;
-    
+
+	struct {
+
+		HANDLE FileHandle;
+		PFILE_OBJECT FileObject;
+
+		PUCHAR Metadata;
+		LARGE_INTEGER	FileSize;
+	}Lower;
 	
 	//
 	//  Lock used to protect this context.

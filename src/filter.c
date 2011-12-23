@@ -136,6 +136,18 @@ FltCleanupContext(
             		ExDeleteResourceLite( streamContext->Resource );
             		FsFreeResource( streamContext->Resource);
         	}
+		if(streamContext->Lower.FileObject != NULL) {
+
+			FsCloseFile(streamContext->Lower.FileHandle, streamContext->Lower.FileObject);
+		}
+		if(streamContext->Lower.Metadata != NULL) {
+
+			ExFreePoolWithTag(streamContext->Lower.Metadata, SIFS_METADATA_TAG);
+		}
+		if(streamContext->NameInfo != NULL) {
+
+			FltReleaseFileNameInformation( streamContext->NameInfo  );
+		}
 		
 		break;
 	case FLT_STREAMHANDLE_CONTEXT:
@@ -217,9 +229,10 @@ FltCheckPreCreatePassthru_2(
 
 	RtlInitUnicodeString(&pattern, L"txt");
 
-	  // 测试条件: 仅对\\Device\\HarddiskVolume3 加密
+	  // 测试条件: 仅对\\Device\\HarddiskVolume3 加密 LanmanRedirector
        if((NameInfo->Volume.Length == 0)
-		|| (RtlCompareMemory(NameInfo->Volume.Buffer, L"\\Device\\HarddiskVolume3", 46) != 46)){
+		|| ((RtlCompareMemory(NameInfo->Volume.Buffer, L"\\Device\\HarddiskVolume3", 46) != 46)
+		&& (RtlCompareMemory(NameInfo->Volume.Buffer, L"\\Device\\LanmanRedirector", 48) != 48))){
 
 		goto FltCheckPreCreatePassthru_2_Cleanup;
 
@@ -521,10 +534,10 @@ FltPostCreate(
 		&& ((streamContextCreated == TRUE)
 			|| (streamContext->CryptedFile == FALSE))) {
 
-		if(SifsReadSifsMetadata(Cbd->Iopb->TargetInstance, Cbd->Iopb->TargetFileObject, &(streamContext->CryptContext)) == -1){
+		if(SifsReadSifsMetadata(Cbd->Iopb->TargetInstance, Cbd->Iopb->TargetFileObject, streamContext) == -1){
 
 			p2pCtx->CryptedFile = FALSE;
-		}		
+		}			
 	}    	
 
 	//
@@ -535,6 +548,13 @@ FltPostCreate(
 
     	streamContext->CryptedFile = p2pCtx->CryptedFile;
     	streamContext->FileSize = fileStandardInformation.EndOfFile;
+
+	if(streamContext->NameInfo == NULL) {
+
+		streamContext->NameInfo = nameInfo;
+
+		nameInfo = NULL;
+	}	
 			
     	//
     	//  Relinquish write acccess to the context
@@ -577,10 +597,45 @@ FLT_PREOP_CALLBACK_STATUS
 FltPreCleanup(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
-	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;	
+	PSTREAM_CONTEXT streamContext = NULL;
+	BOOLEAN streamContextCreated = FALSE;
+	NTSTATUS status = STATUS_SUCCESS;
+
+	__try{
+
+		status = CtxFindOrCreateStreamContext(Data, 
+	                                              FALSE,
+	                                              &streamContext,
+	                                              &streamContextCreated);
+
+	        if (!NT_SUCCESS( status )) {
+
+	        	__leave;
+	        }
+
+	        FsAcquireResourceShared(streamContext->Resource);
+
+	        if(streamContext->CryptedFile == FALSE) {
+
+	            FsReleaseResource(streamContext->Resource);
+	            
+	            __leave;
+	        }	        		 
+
+		 FsReleaseResource(streamContext->Resource);
+		 
+	}__finally{
+
+		if(streamContext != NULL ){
+
+			FltReleaseContext(streamContext);
+		}
+	}
 
 	return retValue;
 }
@@ -589,10 +644,55 @@ FLT_PREOP_CALLBACK_STATUS
 FltPreClose(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+
+	PSTREAM_CONTEXT streamContext = NULL;
+	BOOLEAN streamContextCreated = FALSE;
+	NTSTATUS status = STATUS_SUCCESS;
+
+	__try{
+
+		status = CtxFindOrCreateStreamContext(Data, 
+	                                              FALSE,
+	                                              &streamContext,
+	                                              &streamContextCreated);
+
+	        if (!NT_SUCCESS( status )) {
+
+	        	__leave;
+	        }
+
+	        FsAcquireResourceShared(streamContext->Resource);
+
+	        if(streamContext->CryptedFile == FALSE) {
+
+	            FsReleaseResource(streamContext->Resource);
+	            
+	            __leave;
+	        }	        		 
+
+		 FsReleaseResource(streamContext->Resource);
+
+#if 0
+		 if(SifsWriteFileSize(Data->Iopb->TargetInstance, &(streamContext->NameInfo->Name)
+			,streamContext->Lower.Metadata, streamContext->CryptContext.MetadataSize, streamContext->FileSize.QuadPart) == -1) {
+
+			LOG_PRINT(LOGFL_ERRORS,  ("FileFlt!FltPreClose:    Pid = %d, FileSize = %lld failed to write head.\n"
+				,  PsGetCurrentProcessId(),  streamContext->FileSize.QuadPart));
+		 }
+#endif
+		 
+	}__finally{
+
+		if(streamContext != NULL ){
+
+			FltReleaseContext(streamContext);
+		}
+	}
 
 	return retValue;
 }
@@ -667,11 +767,10 @@ FltPreRead(
 
 			FsAcquireResourceShared(streamContext->Resource);
 
-			if(iopb->Parameters.Read.ByteOffset.QuadPart >= SifsFileValidateLength(streamContext)) {
+			if(iopb->Parameters.Read.ByteOffset.QuadPart >= SifsValidateFileSize(streamContext)) {
 
 				FsReleaseResource(streamContext->Resource);
 
-				DbgPrint("Read(1): -----------%d, %d\n", iopb->Parameters.Read.ByteOffset.QuadPart, SifsFileValidateLength(streamContext));
 				Data->IoStatus.Status = STATUS_END_OF_FILE ;
 				Data->IoStatus.Information = 0;		
 
@@ -925,9 +1024,9 @@ FltPostRead(
 	                
 	            }else{
 
-	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsFileValidateLength(p2pCtx->StreamContext)) {
+	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsValidateFileSize(p2pCtx->StreamContext)) {
 
-	                    Data->IoStatus.Information = SifsFileValidateLength(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
+	                    Data->IoStatus.Information = SifsValidateFileSize(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
 	                }	                
 	            }
 	     	}
@@ -1215,9 +1314,9 @@ Return Value:
 	                
 	            }else{
 
-	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsFileValidateLength(p2pCtx->StreamContext)) {
+	                if((Data->Iopb->Parameters.Read.ByteOffset.QuadPart  + Data->IoStatus.Information) > SifsValidateFileSize(p2pCtx->StreamContext)) {
 
-	                    Data->IoStatus.Information = SifsFileValidateLength(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
+	                    Data->IoStatus.Information = SifsValidateFileSize(p2pCtx->StreamContext) - Data->Iopb->Parameters.Read.ByteOffset.QuadPart;
 	                }	                
 	            }
 		 	
@@ -1636,16 +1735,30 @@ FltPostWrite(
 
 			FsReleaseResource(p2pCtx->StreamContext->Resource);
 		}
-		
+
+#if 0
+		if(SifsWriteFileSize(Cbd->Iopb->TargetInstance, Cbd->Iopb->TargetFileObject
+			,p2pCtx->StreamContext->Lower.Metadata, p2pCtx->StreamContext->CryptContext.MetadataSize, fileSize) == -1) {
+
+			LOG_PRINT(LOGFL_WRITE,  ("FileFlt!FltPostWrite:    Pid = %d, FileSize = %lld\n"
+				,  PsGetCurrentProcessId(),  fileSize));
+		 }
+#endif
+
 	}__finally{
 
 		
 	}			
     }else{
-    
 	    
+	    //
+	    //  Free allocate POOL and volume context
+	    //
 
-	    LOG_PRINT( LOGFL_WRITE,
+	    ExFreePool( p2pCtx->SwappedBuffer );	    
+    }
+
+     LOG_PRINT( LOGFL_WRITE,
 	               ("FileFlt!FltPostWrite:    Pid = %d %wZ newB=%p status = 0x%x info=%d byteOffset = %lld fileSize = %lld Freeing\n",
 	               PsGetCurrentProcessId(),
 	                &p2pCtx->VolCtx->VolumeName,
@@ -1654,14 +1767,7 @@ FltPostWrite(
 	                Cbd->IoStatus.Information,
 	                Cbd->Iopb->Parameters.Write.ByteOffset.QuadPart,
 	                p2pCtx->StreamContext->FileSize.QuadPart) );
-
-	    //
-	    //  Free allocate POOL and volume context
-	    //
-
-	    ExFreePool( p2pCtx->SwappedBuffer );	    
-    }
-
+	 
     FltReleaseContext( p2pCtx->StreamContext );
 
     ExFreeToNPagedLookasideList( &volumeContext->Pre2PostContextList,
@@ -2102,6 +2208,8 @@ FltPreNetworkQueryOpen(
     )
 {
 	FLT_PREOP_CALLBACK_STATUS 	retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+
+#if 0
 	PFLT_FILE_NAME_INFORMATION 	nameInfo = NULL;
 	NTSTATUS status = STATUS_SUCCESS;
 	CRYPT_CONTEXT cryptContext ;
@@ -2140,7 +2248,13 @@ FltPreNetworkQueryOpenCleanup:
 			retValue = FLT_PREOP_DISALLOW_FASTIO;
 		}
 	}
+#endif
 
+	if(FLT_IS_FASTIO_OPERATION(Data)) {
+
+		retValue = FLT_PREOP_DISALLOW_FASTIO;
+	}
+	
 	return retValue;
 }
 
@@ -2231,7 +2345,7 @@ FltCheckValidateSifs(
 
 			if(FsCheckFileIsDirectoryByObject(Instance, fileObject) == FALSE) {
 				
-				rc = SifsCheckValidateSifs(Instance, fileObject, PageVirt, PageVirtLen);
+				rc = SifsQuickCheckValidateSifs(Instance, fileObject, PageVirt, PageVirtLen);
 			}
 
 			FsCloseFile(fileHandle, fileObject);
@@ -2484,6 +2598,12 @@ FltPreDirCtrlBuffers(
 
     try {        
 
+	if((VolumeContext->FileSystemType == FLT_FSTYPE_LANMAN)
+		&& (FltGetTaskStateInPreCreate(Data) != FLT_TASK_STATE_EXPLORE_HOOK)){
+
+		__leave;
+	}
+	
 	if(!((fileInformationClass == FileBothDirectoryInformation)
 			|| (fileInformationClass == FileDirectoryInformation)
 			|| (fileInformationClass == FileFullDirectoryInformation)
