@@ -1,7 +1,7 @@
 #include "fileflt.h"
 
 ULONG
-SifsFileValidateLength(
+SifsValidateFileSize(
 	__in PSTREAM_CONTEXT StreamContext
 	)
 {

@@ -9,6 +9,63 @@
 #endif
 
 //----------------------------------------------------------------------------------------
+
+void put_unaligned_be16(u16 val, u8 *p)
+{
+	*p++ = val >> 8;
+	*p++ = val;
+}
+
+u16 get_unaligned_be16(u8 *p)
+{
+	return p[0] << 8 | p[1];
+}
+
+void put_unaligned_be32(u32 val, u8 *p)
+{
+	put_unaligned_be16(val >> 16, p);
+	put_unaligned_be16(val, p + 2);
+}
+
+u32 get_unaligned_be32(u8 *p)
+{
+	return p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3];
+}
+
+void put_unaligned_be64(u64 val, u8 *p)
+{
+	put_unaligned_be32(val >> 32, p);
+	put_unaligned_be32(val, p + 4);
+}
+
+u64 get_unaligned_be64(u8 *p)
+{
+	return (u64)get_unaligned_be32(p) << 32 |
+	       get_unaligned_be32(p + 4);
+}
+
+
+VOID
+FsGetRandBytes(
+	__out PVOID Data,
+	__in LONG Size
+	)
+{
+	PEPROCESS eProcess = PsGetCurrentProcess();
+
+	if(Size == 4) {
+		u32 *data = Data;
+		
+		*data = (u32)eProcess;
+	}else if(Size == 8){
+
+		u64 *data = Data;
+		
+		*data = (u64)eProcess;
+	}
+}
+
+//----------------------------------------------------------------------------------------
 //×Ö·û´®Ïà¹Ø
 
 PCHAR 
@@ -824,14 +881,14 @@ FsOpenFile(
     status = FltCreateFile (g_FileFltContext.FileFltHandle,  
 	                Instance,  
 	                FileHandle,  
-	                GENERIC_READ,     
+	                FILE_READ_DATA|FILE_WRITE_DATA,     
 	                &objAttributes, 
 	                &ioStatusBlock, 
 	                (PLARGE_INTEGER) NULL, 
 	                FILE_ATTRIBUTE_NORMAL, 
 	                FILE_SHARE_READ, 
 	                FILE_OPEN, 
-	                0, 
+	                FILE_NON_DIRECTORY_FILE, 
 	                NULL, 
 	                0, 
 	                IO_IGNORE_SHARE_ACCESS_CHECK); 
@@ -901,6 +958,232 @@ FsDeleteFile(
     }
 
     return rc;
+}
+
+NTSTATUS
+FsReadFile (
+    __in PFLT_INSTANCE  Instance,
+    __in PFILE_OBJECT   FileObject,
+    __in LONGLONG ByteOffset,
+    __out PVOID Buffer,
+    __in ULONG  Length,
+    __in FLT_IO_OPERATION_FLAGS Flags,
+    __out PULONG  BytesRead OPTIONAL,
+    __in PFLT_COMPLETED_ASYNC_IO_CALLBACK CallbackRoutine OPTIONAL,
+    __in PVOID  CallbackContext OPTIONAL 
+    )
+{
+    NTSTATUS status = STATUS_UNSUCCESSFUL; 
+    PFLT_CALLBACK_DATA cbd = NULL;
+
+    LARGE_INTEGER byteOffset;
+    LARGE_INTEGER oldByteOffset;
+
+    BOOLEAN isNonCachedIo = FALSE;
+    BOOLEAN dontUpdateByteOffset = FALSE;
+
+    __try{
+        
+         if(!Instance
+             || !FileObject
+             || !Buffer
+             || (Length == 0)) {
+             
+             status = STATUS_INVALID_PARAMETER;
+             __leave;
+        }
+
+        if(CallbackRoutine){
+
+            status = STATUS_NOT_SUPPORTED;
+            __leave;
+        }
+
+        if(BytesRead) {
+
+            *BytesRead = 0;
+        }
+
+        if( FlagOn( FileObject->Flags, FO_SYNCHRONOUS_IO ) ){
+
+            if( FlagOn( Flags, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET ) ){
+
+                dontUpdateByteOffset = TRUE;
+            }
+        }
+
+        byteOffset.QuadPart = ByteOffset;
+        oldByteOffset = FileObject->CurrentByteOffset;
+
+        if( FlagOn( Flags, FLTFL_IO_OPERATION_NON_CACHED )
+            || FlagOn( Flags, FLTFL_IO_OPERATION_PAGING ) 
+            || FlagOn( FileObject->Flags, FO_NO_INTERMEDIATE_BUFFERING ) ){
+
+            isNonCachedIo = TRUE;
+        }
+
+        status = FltAllocateCallbackData(Instance, FileObject,&cbd );
+
+        if (!NT_SUCCESS(status)) { 
+            
+            __leave; 
+        }
+
+        cbd->Iopb->MajorFunction = IRP_MJ_READ;
+        cbd->Iopb->Parameters.Write.ByteOffset = byteOffset;
+        cbd->Iopb->Parameters.Write.Length = Length;
+        cbd->Iopb->Parameters.Write.WriteBuffer = Buffer;
+        cbd->Iopb->IrpFlags = 0;
+
+        SetFlag( cbd->Iopb->IrpFlags, IRP_READ_OPERATION );
+
+        if( isNonCachedIo ) {
+
+            SetFlag( cbd->Iopb->IrpFlags, IRP_NOCACHE );
+        }
+
+        if( FlagOn(FLTFL_IO_OPERATION_PAGING, Flags) ) {
+
+            SetFlag(cbd->Iopb->IrpFlags, IRP_PAGING_IO);
+        }
+
+        FltPerformSynchronousIo(cbd );
+
+        if( dontUpdateByteOffset ){
+
+            FileObject->CurrentByteOffset = oldByteOffset;
+        }
+
+        status = cbd->IoStatus.Status;
+
+        if(BytesRead) {
+
+            *BytesRead = cbd->IoStatus.Information;
+        }
+    }__finally{
+
+        FltFreeCallbackData(cbd);
+    }
+
+    return status;
+}
+
+NTSTATUS
+FsWriteFile (
+    __in PFLT_INSTANCE  Instance,
+    __in PFILE_OBJECT  FileObject,
+    __in LONGLONG  ByteOffset,
+    __in ULONG  Length,
+    __in PVOID  Buffer,
+    __in FLT_IO_OPERATION_FLAGS  Flags,
+    __out PULONG  BytesWrite OPTIONAL,
+    __out PFLT_COMPLETED_ASYNC_IO_CALLBACK  CallbackRoutine OPTIONAL,
+    __in PVOID  CallbackContext OPTIONAL 
+    )
+{
+    NTSTATUS status = STATUS_UNSUCCESSFUL; 
+    PFLT_CALLBACK_DATA cbd = NULL;
+
+    LARGE_INTEGER byteOffset;
+    LARGE_INTEGER oldByteOffset;     
+
+    BOOLEAN isNonCachedIo = FALSE;
+    BOOLEAN dontUpdateByteOffset = FALSE;
+
+    __try{ 
+
+        if( !Instance
+           || !FileObject
+           || !Buffer
+           || (Length == 0)){
+
+            status = STATUS_INVALID_PARAMETER;
+            __leave;
+        }
+
+        if(CallbackRoutine){
+
+           status = STATUS_NOT_SUPPORTED;
+           __leave;
+        }
+
+
+        if(BytesWrite){
+
+           *BytesWrite = 0;
+        }
+
+        byteOffset.QuadPart = ByteOffset;
+        oldByteOffset = FileObject->CurrentByteOffset;
+
+        if( FlagOn( FileObject->Flags, FO_SYNCHRONOUS_IO ) ){
+
+            if( FlagOn( Flags, FLTFL_IO_OPERATION_DO_NOT_UPDATE_BYTE_OFFSET ) ){
+
+                dontUpdateByteOffset = TRUE;
+            }
+        }       
+        
+        if( FlagOn( Flags, FLTFL_IO_OPERATION_NON_CACHED ) 
+            || FlagOn( Flags, FLTFL_IO_OPERATION_PAGING )
+            || FlagOn( FileObject->Flags, FO_NO_INTERMEDIATE_BUFFERING ) ){
+
+            isNonCachedIo = TRUE;
+        }
+
+        status = FltAllocateCallbackData(Instance,FileObject,&cbd );
+
+        if (!NT_SUCCESS(status)) {
+
+            __leave;
+        }
+
+        cbd->Iopb->MajorFunction = IRP_MJ_WRITE;
+        cbd->Iopb->Parameters.Write.ByteOffset = byteOffset;
+        cbd->Iopb->Parameters.Write.Length = Length;
+        cbd->Iopb->Parameters.Write.WriteBuffer = Buffer;
+        cbd->Iopb->IrpFlags = 0;
+
+	SetFlag( cbd->Iopb->IrpFlags, IRP_WRITE_OPERATION );
+	
+        if( FlagOn( FileObject->Flags, FO_WRITE_THROUGH ) ){
+
+            cbd->Iopb->OperationFlags = SL_WRITE_THROUGH;
+        }       
+
+        if( isNonCachedIo == TRUE){
+
+            SetFlag( cbd->Iopb->IrpFlags, IRP_NOCACHE );
+        }
+
+        if( FlagOn(FLTFL_IO_OPERATION_PAGING, Flags) ){
+
+            SetFlag(cbd->Iopb->IrpFlags, IRP_PAGING_IO);
+        }
+
+        FltPerformSynchronousIo(cbd );
+
+        if( dontUpdateByteOffset == TRUE ){
+
+            FileObject->CurrentByteOffset = oldByteOffset;
+        }
+
+        status = cbd->IoStatus.Status;
+
+        if(BytesWrite) {
+
+            *BytesWrite = cbd->IoStatus.Information;
+        }
+	
+    }__finally{
+
+        if(cbd != NULL) {
+
+            FltFreeCallbackData( cbd );
+        }
+    }
+
+    return status; 
 }
 
 BOOLEAN
