@@ -45,9 +45,11 @@ SifsExpandAndTruncateFile(
 	if(NT_SUCCESS(Status)) {
 
 		Size->QuadPart = fileAllocationInformation.AllocationSize.QuadPart ;
+		Mcb->Lower.AllocationSize.QuadPart = fileAllocationInformation.AllocationSize.QuadPart;
 	}else{
 
 	   	Size->QuadPart = End;
+		Mcb->Lower.AllocationSize.QuadPart = End;
 	}
 
 	Status = STATUS_SUCCESS;
@@ -74,6 +76,9 @@ SifsDeleteFile(
         if(FsDeleteFile(IrpContext->FltObjects->Instance, Mcb->Lower.FileObject) == 0){
 
 		Status = STATUS_SUCCESS;
+
+		SifsDerefXcb(Fcb);
+		SifsDerefMcb(Mcb);
         }
     }__finally{
     

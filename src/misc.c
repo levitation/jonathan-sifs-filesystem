@@ -303,6 +303,8 @@ SifsCreateUnderlyingFile(
 
 	if(Mcb) {
 
+		SifsReferMcb(mcb);
+		
 		*Mcb = mcb;
 	}
 	   
@@ -317,7 +319,7 @@ SifsCreateUnderlyingFileCleanup:
 		
 		if(mcb) {
 
-			SifsFreeMcb(mcb);
+			SifsDerefMcb(mcb);
 		}
 	}
 	
@@ -362,6 +364,8 @@ SifsOpenUnderlyingFile(
 
 	if(Mcb) {
 
+		SifsReferMcb(mcb);
+		
 		*Mcb = mcb;
 	}
 	   
@@ -376,11 +380,34 @@ SifsOpenUnderlyingFileCleanup:
 		
 		if(mcb) {
 
-			SifsFreeMcb(mcb);
+			SifsDerefMcb(mcb);
 		}
 	}
 	
 
 	return status;
+}
+
+BOOLEAN 
+SifsCheckFcbTypeIsSifs(
+	__in PFILE_OBJECT FileObject
+	)
+{
+	BOOLEAN rc = FALSE;
+	
+	if(FileObject){
+		
+		if(FileObject->FsContext){
+			
+			PFSRTL_COMMON_FCB_HEADER fcbHead = (PFSRTL_COMMON_FCB_HEADER)FileObject->FsContext;
+			
+			if(fcbHead->NodeTypeCode == SIFSFCB){
+				
+				rc  = TRUE;
+			}
+		}
+	}
+	
+	return rc;
 }
 

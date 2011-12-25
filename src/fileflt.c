@@ -637,7 +637,7 @@ Return Value:
 
     // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
     
-    retValue = SifsPreCleanup(Data, FltObjects, CompletionContext);
+    retValue = SifsPreCleanup(Data, FltObjects, CompletionContext, volumeContext);
 
 #else
 
@@ -711,7 +711,7 @@ Return Value:
 
     // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
     
-    retValue = SifsPreClose(Data, FltObjects, CompletionContext);
+    retValue = SifsPreClose(Data, FltObjects, CompletionContext, volumeContext);
 
 #else	 
 		 

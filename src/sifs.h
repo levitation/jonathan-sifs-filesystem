@@ -305,7 +305,7 @@ __inline ULONG DEC_OBJ_CNT(PULONG _C) {
 }
 
 #define SifsReferMcb(Mcb) SifsReferXcb(&Mcb->Refercount)
-#define SifsDerefMcb(Mcb) SifsDerefXcb(&Mcb->Refercount)
+#define SifsDerefMcb(Mcb)  SifsDerefXcb(&Mcb->Refercount)
 
 //
 // SIFS_CCB Context Control Block
@@ -450,14 +450,16 @@ FLT_PREOP_CALLBACK_STATUS
 SifsPreCleanup(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_PREOP_CALLBACK_STATUS
 SifsPreClose(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_PREOP_CALLBACK_STATUS
@@ -675,6 +677,11 @@ SifsOpenUnderlyingFile(
 	__out PSIFS_MCB *Mcb
 	);
 
+BOOLEAN 
+SifsCheckFcbTypeIsSifs(
+	__in PFILE_OBJECT FileObject
+	);
+
 //-----------------------------------------------------------------------------
 //create
 
@@ -682,6 +689,22 @@ FLT_PREOP_CALLBACK_STATUS
 SifsCommonCreate(
     __in PSIFS_IRP_CONTEXT IrpContext
     );
+
+//-----------------------------------------------------------------------------
+//cleanup
+
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonCleanup (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
+
+//-----------------------------------------------------------------------------
+//close
+
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonClose (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
 
 //-----------------------------------------------------------------------------
 //read
@@ -812,5 +835,23 @@ SifsNotifyReportChange (
     __in ULONG             Filter,
     __in ULONG             Action   
     );
+
+//-----------------------------------------------------------------------------
+//flush
+
+NTSTATUS
+SifsFlushFile (
+    __in PSIFS_IRP_CONTEXT    IrpContext,
+    __in PSIFS_FCB            Fcb,
+    __in PSIFS_CCB            Ccb
+	);
+
+//-----------------------------------------------------------------------------
+//fastio
+
+FAST_IO_POSSIBLE
+SifsIsFastIoPossible(
+    __in PSIFS_FCB Fcb
+	);
 
 #endif /* __FILEFLT_SIFS_H__ */

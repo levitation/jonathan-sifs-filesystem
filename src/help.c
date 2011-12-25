@@ -44,57 +44,6 @@ u64 get_unaligned_be64(u8 *p)
 	       get_unaligned_be32(p + 4);
 }
 
-
-VOID
-FsGetRandBytes(
-	__out PVOID Data,
-	__in LONG Size
-	)
-{
-	PEPROCESS eProcess = PsGetCurrentProcess();
-
-	if(Size == 4) {
-		u32 *data = Data;
-		
-		*data = (u32)eProcess;
-	}else if(Size == 8){
-
-		u64 *data = Data;
-		
-		*data = (u64)eProcess;
-	}
-}
-
-LARGE_INTEGER
-FsNtTime (
-	__in ULONG i_time
-	)
-{
-    LARGE_INTEGER SysTime;
-
-    SysTime.QuadPart = 0;
-    RtlSecondsSince1970ToTime(i_time, &SysTime);
-
-    return SysTime;
-}
-
-ULONG
-FsLinuxTime (
-	__in LARGE_INTEGER SysTime
-	)
-{
-    ULONG   Ext2Time = 0;
-
-    if (!RtlTimeToSecondsSince1970(&SysTime, &Ext2Time)) {
-        LARGE_INTEGER NtTime;
-        KeQuerySystemTime(&NtTime);
-        RtlTimeToSecondsSince1970(&NtTime, &Ext2Time);
-    }
-
-    return Ext2Time;
-}
-
-
 //----------------------------------------------------------------------------------------
 //字符串相关
 
@@ -291,6 +240,65 @@ out:
 
 //-------------------------------------------------------------------------------------
 //系统相关
+
+VOID
+FsSleep(
+	__in ULONG ms
+	)
+{
+    LARGE_INTEGER Timeout;
+    Timeout.QuadPart = (LONGLONG)ms*1000*(-10); /* ms/1000 sec*/
+    KeDelayExecutionThread(KernelMode, TRUE, &Timeout);
+}
+
+VOID
+FsGetRandBytes(
+	__out PVOID Data,
+	__in LONG Size
+	)
+{
+	PEPROCESS eProcess = PsGetCurrentProcess();
+
+	if(Size == 4) {
+		u32 *data = Data;
+		
+		*data = (u32)eProcess;
+	}else if(Size == 8){
+
+		u64 *data = Data;
+		
+		*data = (u64)eProcess;
+	}
+}
+
+LARGE_INTEGER
+FsNtTime (
+	__in ULONG i_time
+	)
+{
+    LARGE_INTEGER SysTime;
+
+    SysTime.QuadPart = 0;
+    RtlSecondsSince1970ToTime(i_time, &SysTime);
+
+    return SysTime;
+}
+
+ULONG
+FsLinuxTime (
+	__in LARGE_INTEGER SysTime
+	)
+{
+    ULONG   Ext2Time = 0;
+
+    if (!RtlTimeToSecondsSince1970(&SysTime, &Ext2Time)) {
+        LARGE_INTEGER NtTime;
+        KeQuerySystemTime(&NtTime);
+        RtlTimeToSecondsSince1970(&NtTime, &Ext2Time);
+    }
+
+    return Ext2Time;
+}
 
 VOID
 FsGetCurrentVersion (

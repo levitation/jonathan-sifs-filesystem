@@ -20,16 +20,7 @@ void put_unaligned_be64(u64 val, u8 *p);
 
 u64 get_unaligned_be64(u8 *p);
 
-VOID
-FsGetRandBytes(
-	__out PVOID Data,
-	__in LONG Size
-	);
 
-ULONG
-FsLinuxTime (
-	__in LARGE_INTEGER SysTime
-	);
 //----------------------------------------------------------------------------------------
 //字符串相关
 
@@ -74,6 +65,27 @@ FsWcsstrExtern(
 
 //----------------------------------------------------------------------------------------
 //系统相关
+
+VOID
+FsSleep(
+	__in ULONG ms
+	);
+
+VOID
+FsGetRandBytes(
+	__out PVOID Data,
+	__in LONG Size
+	);
+
+LARGE_INTEGER
+FsNtTime (
+	__in ULONG i_time
+	);
+
+ULONG
+FsLinuxTime (
+	__in LARGE_INTEGER SysTime
+	);
 
 VOID
 FsGetCurrentVersion (

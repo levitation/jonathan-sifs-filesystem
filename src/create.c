@@ -12,6 +12,7 @@ SifsSupersedeOrOverWriteFile(
 {
     LARGE_INTEGER   CurrentTime;
     LARGE_INTEGER   Size;
+    FILE_END_OF_FILE_INFORMATION   fileEndOfFileInformation ;
 
     KeQuerySystemTime(&CurrentTime);
 
@@ -50,6 +51,9 @@ SifsSupersedeOrOverWriteFile(
         Fcb->Lower->LastWriteTime.QuadPart = FsLinuxTime(CurrentTime);
 
     //save
+    fileEndOfFileInformation.EndOfFile = Fcb->Lower->FileSize;
+    FltSetInformationFile(IrpContext->FltObjects->Instance, Fcb->Lower->FileObject
+			, &fileEndOfFileInformation, sizeof(fileEndOfFileInformation), FileEndOfFileInformation);    
 
     return STATUS_SUCCESS;
 }
@@ -162,10 +166,10 @@ SifsCreateFile(
 			}
 
 		       Data->IoStatus.Information = FILE_OPENED;
-	     	}           
+	     	}        
 
 		SifsReferMcb(Mcb);
-
+		
 	       SifsInsertMcb(VolumeContext, Mcb);
 		   
 	 }else{ //must IrpContext->Parameters.Create.FileExist == TRUE
@@ -537,7 +541,7 @@ SifsCommonCreate(
 {
     FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_COMPLETE;
     BOOLEAN             PostIrp = FALSE;
-    NTSTATUS Status = STATUS_SUCCESS;
+    NTSTATUS 		   Status = STATUS_SUCCESS;
     BOOLEAN             VcbResourceAcquired = FALSE;
     PVOLUME_CONTEXT VolumeContext = IrpContext->VolumeContext;
     
@@ -553,6 +557,8 @@ SifsCommonCreate(
         VcbResourceAcquired = TRUE;	 
 
 	 retValue = SifsCreateFile(IrpContext, &PostIrp);
+
+	 Status = IrpContext->Data->IoStatus.Status;
 		
     }__finally{
 

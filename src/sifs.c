@@ -151,7 +151,8 @@ SifsCleanupContext(
 		volumeContext = Context;
 
 		SifsCleanupAllMcbs(volumeContext);
-		
+
+		RemoveEntryList(&volumeContext->NotifyList);
 		ExDeleteResourceLite(&(volumeContext->MainResource));
 		ExDeleteResourceLite(&(volumeContext->McbLock));	
 		
@@ -406,10 +407,9 @@ SifsBuildRequest (
                     DbgBreak();
                 }
 
-		  irpContext->SifsDispatchRequest = SifsDispatchRequest;
-		  irpContext->VolumeContext = VolumeContext;
-		  
 		  FltReferenceContext(VolumeContext);
+		  irpContext->VolumeContext = VolumeContext;
+		  irpContext->SifsDispatchRequest = SifsDispatchRequest;	 
 		  
                 retValue = SifsDispatchRequest(irpContext);
             }
@@ -462,7 +462,7 @@ SifsPreCreate(
 	BOOLEAN directory = FALSE;	
 	FLT_TASK_STATE 	taskState = FLT_TASK_STATE_UNKNOWN;
 	ULONG                  createDisposition = (Data->Iopb->Parameters.Create.Options >> 24) & 0x000000ff;
-	SIFS_PARAMETERS parameters;
+	SIFS_PARAMETERS parameters = {  0 };
 
 	if(FileFltStatusValidate) {
 
@@ -524,16 +524,6 @@ SifsPreCreate(
 		goto SifsPreCreateCleanup;
 	}
 
-#if 0
-	if((createDisposition == FILE_CREATE)
-		|| (createDisposition == FILE_SUPERSEDE)
-		|| (createDisposition == FILE_OVERWRITE)
-		|| (createDisposition == FILE_OVERWRITE_IF)) { //FILE_OPEN_IF
-		
-		fileExist = FALSE;
-	}    
-#endif
-	
 	taskState = SifsGetTaskStateInPreCreate(Data);	
 
 	RtlZeroMemory(&parameters, sizeof(parameters));
@@ -559,10 +549,17 @@ FLT_PREOP_CALLBACK_STATUS
 SifsPreCleanup(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonCleanup);
+	}
 
 	return retValue;
 }
@@ -571,10 +568,17 @@ FLT_PREOP_CALLBACK_STATUS
 SifsPreClose(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonClose);
+	}
 
 	return retValue;
 }

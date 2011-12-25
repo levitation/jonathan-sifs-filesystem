@@ -173,17 +173,9 @@ SifsFreeFcb (
             (Fcb->Mcb->Identifier.Size == sizeof(SIFS_MCB))) {
 
         ASSERT (Fcb->Mcb->Fcb == Fcb);
-        if (IsFileDeleted(Fcb->Mcb)) {
-
-	     //SifsRemoveMcb();
-            Fcb->Mcb->Fcb = NULL;
-            SifsDerefMcb(Fcb->Mcb);
-
-        } else {
-
-            Fcb->Mcb->Fcb = NULL;
-            SifsDerefMcb(Fcb->Mcb);
-        }
+		
+        Fcb->Mcb->Fcb = NULL;
+        SifsDerefMcb(Fcb->Mcb);
 
     } else {
         DbgBreak();
@@ -291,21 +283,13 @@ SifsAllocateMcb (
     /* initialize Mcb names */
     if (FileName) {
 
-        if (( FileName->Length >= 4 && FileName->Buffer[0] == L'.') &&
-                ((FileName->Length == 4 && FileName->Buffer[1] != L'.') ||
-                 FileName->Length >= 6 )) {
-            SetFlag(Mcb->FileAttr, FILE_ATTRIBUTE_HIDDEN);
-        }
-
         if (!SifsBuildName(&Mcb->ShortName, ShortName)) {
             goto errorout;
         }
         if (!SifsBuildName(&Mcb->FullName, FileName)) {
             goto errorout;
         }
-    }    
-
-    SifsReferMcb(Mcb);
+    }       
 	
     return Mcb;
 
@@ -408,6 +392,7 @@ SifsRemoveMcb (
              ClearLongFlag(Mcb->Flags, MCB_ENTRY_TREE);
 	}
 
+	SifsDerefXcb(&Vcb->NumOfMcb);
 	RemoveEntryList(&(Mcb->Next));
 
     } __finally {
@@ -449,11 +434,10 @@ SifsFirstUnusedMcb(
                 ASSERT(IsFlagOn(Mcb->Flags, MCB_VCB_LINK));
 
                 if ((Mcb->Fcb == NULL) &&
-                        (Mcb->Refercount == 0) ) {
+                        (Mcb->Refercount == 1) ) {
 
                     SifsRemoveMcb(Vcb, Mcb);
-                    ClearLongFlag(Mcb->Flags, MCB_VCB_LINK);
-                    SifsDerefXcb(&Vcb->NumOfMcb);
+                    ClearLongFlag(Mcb->Flags, MCB_VCB_LINK);                    
 
                     /* attach all Mcb into a chain*/
                     InsertHeadList(Head, &(Mcb->Next));
