@@ -153,7 +153,8 @@ typedef struct _FILEFLT_CONTEXT {
 	PFLT_PORT ServerPort;
 	PEPROCESS UserProcess;
 	PFLT_PORT ClientPort;
-	
+
+	USHORT     MaxDepth;
 }FILEFLT_CONTEXT;
 
 extern FILEFLT_CONTEXT g_FileFltContext;
@@ -188,6 +189,14 @@ typedef struct _VOLUME_CONTEXT {
     ULONG                       ReferenceCount;     /* total ref count */
     ULONG                       OpenHandleCount;    /* all handles */
 
+
+    /* Cleaning thread related: resource cleaner */
+    struct {
+        KEVENT                  Engine;
+        KEVENT                  Wait;
+    } Reaper;
+
+    BOOLEAN                   ThreadStop;
 
     // List of IRPs pending on directory change notify requests
     LIST_ENTRY                  NotifyList;
@@ -516,6 +525,37 @@ SwapPostDirCtrlBuffers(
     __in PVOID CompletionContext,
     __in FLT_POST_OPERATION_FLAGS Flags
     );
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreLockControl(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostLockControl(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreFlushBuffers(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostFlushBuffers(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
 
 VOID
 ReadDriverParameters (

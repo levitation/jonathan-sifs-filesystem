@@ -154,8 +154,8 @@ SifsSearchMcb_i(
 
 		if((context->ShortName.Length == LastFileName->Length)
 			&& (context->FullName.Length == FileName->Length)
-			&& (!RtlCompareUnicodeString(&context->ShortName, LastFileName, TRUE))
-			&& (!RtlCompareUnicodeString(&context->FullName, FileName, TRUE))){
+			&& (RtlEqualUnicodeString(&context->ShortName, LastFileName, TRUE))
+			&& (RtlEqualUnicodeString(&context->FullName, FileName, TRUE))){
 
 			if(Mcb) {
 

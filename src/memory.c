@@ -265,7 +265,7 @@ SifsAllocateMcb (
 {
     PSIFS_MCB   Mcb = NULL;
     NTSTATUS    Status = STATUS_SUCCESS;
-
+        	
     /* allocate Mcb from LookasideList */
     Mcb = (PSIFS_MCB) (ExAllocateFromPagedLookasideList(
                            &(g_FileFltContext.SifsMcbLookasideList)));
@@ -342,6 +342,11 @@ SifsFreeMcb (
 
     Mcb->Identifier.Type = 0;
     Mcb->Identifier.Size = 0;
+
+    if(Mcb->Lower.FileObject != NULL) {
+
+	FsCloseFile(Mcb->Lower.FileHandle, Mcb->Lower.FileObject);
+    }
 
     ExFreeToPagedLookasideList(&(g_FileFltContext.SifsMcbLookasideList), Mcb);
 }
@@ -496,3 +501,134 @@ SifsCleanupAllMcbs(
     }
 }
 
+/* Reaper thread to release unused Mcb blocks */
+VOID
+SifsReaperThread(
+    __in PVOID   Context
+	)
+{
+    LARGE_INTEGER   Timeout;
+    PSIFS_MCB       Mcb  = NULL;
+
+    PVOLUME_CONTEXT VolumeContext = Context;
+    LIST_ENTRY Head;
+
+    __try {
+
+        /* wake up DirverEntry */
+        KeSetEvent(&VolumeContext->Reaper.Engine, 0, FALSE);
+	 InitializeListHead(&(Head));
+
+        /* now process looping */
+        while (TRUE) {
+
+            Timeout.QuadPart = (LONGLONG)-2*1000*1000*10; /* 2 second */
+
+            /* wait until it is waken or it times out */
+            KeWaitForSingleObject(
+                &(VolumeContext->Reaper.Wait),
+                Executive,
+                KernelMode,
+                FALSE,
+                &Timeout
+            );
+
+            if(VolumeContext->ThreadStop == TRUE) {
+
+	         break;
+            }
+            /* search all Vcb to get unused resources freed to system */
+
+            while (0 == SifsFirstUnusedMcb(VolumeContext, FALSE, g_FileFltContext.MaxDepth / 4, &Head)) {
+
+		  while(!IsListEmpty(&Head)) {
+
+			PLIST_ENTRY entry = RemoveHeadList(&Head);
+
+			Mcb = CONTAINING_RECORD(entry, SIFS_MCB, Next);
+
+			SifsFreeMcb(Mcb);
+		 }
+            }
+
+	      if(VolumeContext->ThreadStop == TRUE) {
+
+	         break;
+            }
+        }
+
+    } __finally {
+
+	 KeSetEvent(&VolumeContext->Reaper.Engine, 0, FALSE);
+    }
+
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+
+NTSTATUS
+SifsStartReaperThread(
+	__in PVOID Context
+	)
+{
+    NTSTATUS status = STATUS_SUCCESS;
+    OBJECT_ATTRIBUTES  oa;
+    HANDLE   handle = 0;
+    PVOLUME_CONTEXT VolumeContext = Context;
+
+    /* initialize wait event */
+    KeInitializeEvent(
+        &VolumeContext->Reaper.Wait,
+        SynchronizationEvent, FALSE
+    );
+
+    /* initialize oa */
+    InitializeObjectAttributes(
+        &oa,
+        NULL,
+        OBJ_CASE_INSENSITIVE |
+        OBJ_KERNEL_HANDLE,
+        NULL,
+        NULL
+    );
+
+    /* start a new system thread */
+    status = PsCreateSystemThread(
+                 &handle,
+                 0,
+                 &oa,
+                 NULL,
+                 NULL,
+                 SifsReaperThread,
+                 Context
+             );
+
+    if (NT_SUCCESS(status)) {
+        ZwClose(handle);
+    }
+
+    return status;
+}
+
+VOID
+SifsStopReaperThread(
+	__in PVOID Context
+	)
+{
+	PVOLUME_CONTEXT VolumeContext = Context;
+	LARGE_INTEGER Timeout;
+
+	VolumeContext->ThreadStop = TRUE;
+	Timeout.QuadPart = (LONGLONG)-10*1000*1000*10; /* 2 second */
+
+	KeSetEvent(&VolumeContext->Reaper.Wait, 0, FALSE);	
+
+        /* wait until it is waken or it times out */
+        KeWaitForSingleObject(
+            &(VolumeContext->Reaper.Engine),
+            Executive,
+            KernelMode,
+            FALSE,
+            &Timeout
+        );
+}

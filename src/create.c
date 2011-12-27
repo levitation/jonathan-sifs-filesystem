@@ -72,7 +72,9 @@ SifsCreateFile(
     PUNICODE_STRING 		FileName = &(IrpContext->Parameters.Create.NameInfo->Name);
     PUNICODE_STRING 		LastFileName = &(IrpContext->Parameters.Create.NameInfo->FinalComponent);
     PVOLUME_CONTEXT 		VolumeContext = IrpContext->VolumeContext;
+    PFILE_OBJECT                 FileObject = IrpContext->FltObjects->FileObject;
 
+    PVPB			   Vpb = NULL;
     PSIFS_MCB		   Mcb = NULL;
     PSIFS_FCB  	   Fcb = NULL;    
     PSIFS_CCB          Ccb = NULL;
@@ -184,6 +186,17 @@ SifsCreateFile(
             Data->IoStatus.Information = FILE_OPENED;
 	 } 
 
+	//
+	//  设置FO的VPB对象
+	//
+	if ( FileObject->RelatedFileObject)
+		Vpb = FileObject->RelatedFileObject->Vpb;
+	else
+		Vpb = FileObject->DeviceObject->Vpb;
+	
+	FileObject->Vpb = Vpb;
+
+	
        if(Mcb) {
 
 		Fcb = Mcb->Fcb;
@@ -427,11 +440,28 @@ SifsCreateFile(
                         (CreateDisposition == FILE_OVERWRITE) ||
                         (CreateDisposition == FILE_OVERWRITE_IF)) {
 
+                    PACCESS_STATE AccessState = NULL;
+		      LUID SecurityPrivilege = { SE_SECURITY_PRIVILEGE, 0 };
+					
                     if (IsFlagOn(VolumeContext->Flags, VCB_WRITE_PROTECTED)) {
                         Status = STATUS_MEDIA_WRITE_PROTECTED;
                         __leave;
                     }
 
+			AccessState = IrpContext->Data->Iopb->Parameters.Create.SecurityContext->AccessState;
+				
+			if ( FlagOn(AccessState->RemainingDesiredAccess, ACCESS_SYSTEM_SECURITY) ){
+				
+				if ( !SeSinglePrivilegeCheck(SecurityPrivilege, UserMode) ){
+					
+					Status = STATUS_ACCESS_DENIED;
+					__leave;
+				}
+					
+				ClearFlag( AccessState->RemainingDesiredAccess, ACCESS_SYSTEM_SECURITY );
+				SetFlag( AccessState->PreviouslyGrantedAccess, ACCESS_SYSTEM_SECURITY );
+			}
+				
                     Status = SifsSupersedeOrOverWriteFile(
                                  IrpContext,
                                  IrpContext->FltObjects->FileObject,

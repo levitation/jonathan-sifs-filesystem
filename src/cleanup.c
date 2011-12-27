@@ -270,7 +270,10 @@ SifsCommonCleanup (
                 IrpContext->Data->IoStatus.Status = Status;
                 SifsCompleteIrpContext(IrpContext, Status);
             }
-        }	 
+        }else{
+
+		IrpContext->Data->IoStatus.Status = Status;
+        }
     }
 
     return retValue;

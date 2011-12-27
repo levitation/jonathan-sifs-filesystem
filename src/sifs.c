@@ -68,6 +68,25 @@ SifsInstanceSetup(
 	 ExInitializeResourceLite(&VolumeContext->McbLock);
 	 InitializeListHead(&VolumeContext->McbList);
 	 InitializeListHead(&VolumeContext->NotifyList);
+	 KeInitializeEvent(&VolumeContext->Reaper.Engine,
+                      SynchronizationEvent, FALSE);
+
+	 /* start resource reaper thread */
+    	status= SifsStartReaperThread(VolumeContext);
+    	if (NT_SUCCESS(status)) {
+
+		LARGE_INTEGER Timeout;
+		
+        	/* make sure Reaperthread is started */
+	      Timeout.QuadPart = (LONGLONG)-10*1000*1000*10; /* 10 seconds */
+	      status = KeWaitForSingleObject(
+	                 &(VolumeContext->Reaper.Engine),
+	                 Executive,
+	                 KernelMode,
+	                 FALSE,
+	                 &Timeout
+	             );	   
+       }       
 
 	 RtlInitEmptyUnicodeString(&(VolumeContext->VolumeName), VolumeContext->VolumeNameBuffer, sizeof(VolumeContext->VolumeNameBuffer));
 	 
@@ -150,6 +169,7 @@ SifsCleanupContext(
 
 		volumeContext = Context;
 
+		SifsStopReaperThread(volumeContext);
 		SifsCleanupAllMcbs(volumeContext);
 
 		RemoveEntryList(&volumeContext->NotifyList);
@@ -655,3 +675,40 @@ SifsPreDirCtrlBuffers(
 	return retValue;
 }
 
+FLT_PREOP_CALLBACK_STATUS
+SifsPreLockControl(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonLockControl);
+	}
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreFlushBuffers(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonFlushBuffers);
+	}
+
+	return retValue;
+}

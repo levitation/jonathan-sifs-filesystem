@@ -504,6 +504,22 @@ SifsPreDirCtrlBuffers(
     __deref_out_opt PVOID *CompletionContext
     );
 
+FLT_PREOP_CALLBACK_STATUS
+SifsPreLockControl(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreFlushBuffers(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
 ULONG
 SifsValidateFileSize(
 	__in PSTREAM_CONTEXT StreamContext
@@ -803,6 +819,16 @@ SifsRemoveMcb (
     __in PSIFS_MCB Mcb
 	);
 
+NTSTATUS
+SifsStartReaperThread(
+	__in PVOID Context
+	);
+
+VOID
+SifsStopReaperThread(
+	__in PVOID Context
+	);
+
 //-----------------------------------------------------------------------------
 //fileinfo
 
@@ -846,6 +872,11 @@ SifsFlushFile (
     __in PSIFS_CCB            Ccb
 	);
 
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonFlushBuffers (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
+
 //-----------------------------------------------------------------------------
 //fastio
 
@@ -853,5 +884,15 @@ FAST_IO_POSSIBLE
 SifsIsFastIoPossible(
     __in PSIFS_FCB Fcb
 	);
+
+//-----------------------------------------------------------------------------
+//lock
+
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonLockControl (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
+
+
 
 #endif /* __FILEFLT_SIFS_H__ */

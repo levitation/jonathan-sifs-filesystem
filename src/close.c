@@ -76,6 +76,7 @@ SifsCommonClose (
             Ccb = (PSIFS_CCB) FileObject->FsContext2;
         }
 
+#if 0
        if (Fcb->Identifier.Type == SIFSVCB) {
 
             if (Ccb) {
@@ -91,6 +92,7 @@ SifsCommonClose (
             Status = STATUS_SUCCESS;
             __leave;
         }
+#endif
 
         if ( (Fcb->Identifier.Type != SIFSFCB) ||
                 (Fcb->Identifier.Size != sizeof(SIFS_FCB))) {
@@ -142,13 +144,13 @@ SifsCommonClose (
             if (FcbResourceAcquired) {
                 ExReleaseResourceLite(&Fcb->MainResource);
                 FcbResourceAcquired = FALSE;
-            }
-
+            }           
+			
             SifsFreeFcb(Fcb);
 
             if (FileObject) {
                 FileObject->FsContext = Fcb = NULL;
-            }
+            }	    
         }
 
         SifsDerefXcb(&Vcb->ReferenceCount);
@@ -182,6 +184,9 @@ SifsCommonClose (
 		  
                 SifsCompleteIrpContext(IrpContext, Status);
             }
+        }else{
+
+		IrpContext->Data->IoStatus.Status = Status;
         }
     }
 
