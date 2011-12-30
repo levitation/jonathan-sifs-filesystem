@@ -947,20 +947,42 @@ SwapPreQueryInformation (
     )
 {
 	FLT_PREOP_CALLBACK_STATUS 	retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	PVOLUME_CONTEXT volumeContext = NULL;
+       NTSTATUS status = STATUS_SUCCESS;
 
 	PAGED_CODE();
+
+	status = FltGetVolumeContext( FltObjects->Filter,
+                                  FltObjects->Volume,
+                                  &volumeContext );
+
+	if (!NT_SUCCESS(status)) {
+
+	    LOG_PRINT( LOGFL_ERRORS,
+	               ("FileFlt!SwapPreQueryInformation:          Error getting volume context, status=%x\n",
+	                status) );
+
+	     goto SwapPreQueryInformationCleanup;
+	}
 
 #if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
 
 	// only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
     
-	retValue = SifsPreQueryInformation(Data, FltObjects, CompletionContext);
+	retValue = SifsPreQueryInformation(Data, FltObjects, CompletionContext, volumeContext);
 #else
 
 	retValue = FltPreQueryInformation(Data, FltObjects, CompletionContext);
 	
 #endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
 
+SwapPreQueryInformationCleanup:
+
+	if(volumeContext != NULL) {
+
+		FltReleaseContext(volumeContext);
+	}
+	
 	return retValue;
 }
 
@@ -1016,21 +1038,43 @@ Return Value:
 --*/
 {
     FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+    PVOLUME_CONTEXT volumeContext = NULL;
+    NTSTATUS status = STATUS_SUCCESS;
 
     PAGED_CODE();
+
+    status = FltGetVolumeContext( FltObjects->Filter,
+                                  FltObjects->Volume,
+                                  &volumeContext );
+
+    if (!NT_SUCCESS(status)) {
+
+        LOG_PRINT( LOGFL_ERRORS,
+               ("FileFlt!SwapPreSetInformation:          Error getting volume context, status=%x\n",
+                status) );
+
+        goto SwapPreSetInformationCleanup;
+   }
 
 #if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
 
    // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
    
-    retValue = SifsPreSetInformation(Data, FltObjects, CompletionContext);
+    retValue = SifsPreSetInformation(Data, FltObjects, CompletionContext, volumeContext);
 
 #else
 
     retValue = FltPreSetInformation(Data, FltObjects, CompletionContext);
 
 #endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
-    
+
+SwapPreSetInformationCleanup:
+
+    if(volumeContext != NULL) {
+
+        FltReleaseContext(volumeContext);
+    }
+	
     return retValue;
 }
 

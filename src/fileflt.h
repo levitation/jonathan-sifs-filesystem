@@ -150,6 +150,8 @@ typedef struct _FILEFLT_CONTEXT {
 	PAGED_LOOKASIDE_LIST        SifsExtLookasideList;
 	PAGED_LOOKASIDE_LIST        SifsDentryLookasideList;
 
+	CACHE_MANAGER_CALLBACKS     CacheManagerNoOpCallbacks;
+
 	PFLT_PORT ServerPort;
 	PEPROCESS UserProcess;
 	PFLT_PORT ClientPort;

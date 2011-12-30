@@ -9,6 +9,11 @@ int module_init(void)
 
 #if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
 
+	    g_FileFltContext.CacheManagerNoOpCallbacks.AcquireForLazyWrite  = SifsNoOpAcquire;
+	    g_FileFltContext.CacheManagerNoOpCallbacks.ReleaseFromLazyWrite = SifsNoOpRelease;
+	    g_FileFltContext.CacheManagerNoOpCallbacks.AcquireForReadAhead  = SifsNoOpAcquire;
+	    g_FileFltContext.CacheManagerNoOpCallbacks.ReleaseFromReadAhead = SifsNoOpRelease;
+	
 	    switch ( MmQuerySystemSize() ) {
 
 	    case MmSmallSystem:

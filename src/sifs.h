@@ -262,6 +262,19 @@ struct _SIFS_MCB {
     ULONG                           Refercount;
 
     SIFS_FILE_CONTEXT       Lower;
+
+    struct{
+
+	LARGE_INTEGER                   CreationTime;
+	LARGE_INTEGER                   LastWriteTime;
+	LARGE_INTEGER                   ChangeTime;
+	LARGE_INTEGER                   LastAccessTime;
+	ULONG 				     	 FileAttributes;
+
+	LARGE_INTEGER		     AllocationSize;
+	LARGE_INTEGER		     ValidDataLength;
+	LARGE_INTEGER		     FileSize;		
+    };
     
 };
 
@@ -480,14 +493,16 @@ FLT_PREOP_CALLBACK_STATUS
 SifsPreQueryInformation (
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_PREOP_CALLBACK_STATUS
 SifsPreSetInformation(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_PREOP_CALLBACK_STATUS
@@ -832,6 +847,16 @@ SifsStopReaperThread(
 //-----------------------------------------------------------------------------
 //fileinfo
 
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonQueryFileInformation (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
+
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonSetFileInformation (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
+
 NTSTATUS
 SifsIsFileRemovable(
     __in PSIFS_FCB            Fcb
@@ -893,6 +918,17 @@ SifsCommonLockControl (
 	__in PSIFS_IRP_CONTEXT IrpContext
 	);
 
+//-----------------------------------------------------------------------------
+//cmcb
+BOOLEAN
+SifsNoOpAcquire (
+    __in PVOID Fcb,
+    __in BOOLEAN Wait
+	);
 
+VOID
+SifsNoOpRelease (
+    __in PVOID Fcb
+	);
 
 #endif /* __FILEFLT_SIFS_H__ */
