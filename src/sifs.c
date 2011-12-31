@@ -607,10 +607,17 @@ FLT_PREOP_CALLBACK_STATUS
 SifsPreRead(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonRead);
+	}
 
 	return retValue;
 }
@@ -619,10 +626,17 @@ FLT_PREOP_CALLBACK_STATUS
 SifsPreWrite(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonWrite);
+	}
 
 	return retValue;
 }

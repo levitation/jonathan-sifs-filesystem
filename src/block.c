@@ -160,3 +160,31 @@ SifsLockUserBuffer (
     return Status;
 }
 
+PVOID
+SifsGetUserBufferOnRead (
+	__in  PFLT_IO_PARAMETER_BLOCK Iopb
+	)
+{
+    if (Iopb->Parameters.Read.MdlAddress) {
+
+        return MmGetSystemAddressForMdlSafe(Iopb->Parameters.Read.MdlAddress, NormalPagePriority);
+    } else {
+
+        return Iopb->Parameters.Read.ReadBuffer;
+    }
+}
+
+PVOID
+SifsGetUserBufferOnWrite(
+	__in  PFLT_IO_PARAMETER_BLOCK Iopb
+	)
+{
+    if (Iopb->Parameters.Read.MdlAddress) {
+
+        return MmGetSystemAddressForMdlSafe(Iopb->Parameters.Write.MdlAddress, NormalPagePriority);
+    } else {
+
+        return Iopb->Parameters.Write.WriteBuffer;
+    }
+}
+

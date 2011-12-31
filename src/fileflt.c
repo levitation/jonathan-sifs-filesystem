@@ -803,7 +803,7 @@ Return Value:
 
     // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
     
-    retValue = SifsPreRead(Data, FltObjects, CompletionContext);
+    retValue = SifsPreRead(Data, FltObjects, CompletionContext, volumeContext);
 
 #else
 
@@ -902,7 +902,7 @@ Return Value:
 
     // only return FLT_PREOP_SUCCESS_NO_CALLBACK or FLT_PREOP_COMPLETE
     
-    retValue = SifsPreWrite(Data, FltObjects, CompletionContext);
+    retValue = SifsPreWrite(Data, FltObjects, CompletionContext, volumeContext);
 
 #else        
              

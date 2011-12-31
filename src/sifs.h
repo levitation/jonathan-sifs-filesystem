@@ -50,6 +50,17 @@
 #define CEILING_ALIGNED(T, A, B) (((A) + (B) - 1) & (~((T)(B) - 1)))
 #define COCKLOFT_ALIGNED(T, A, B) (((A) + (B)) & (~((T)(B) - 1)))
 
+#define READ_AHEAD_GRANULARITY          (0x10000)
+
+//
+// Define IsEndofFile for read and write operations
+//
+
+#define FILE_WRITE_TO_END_OF_FILE       0xffffffff
+
+#define IsEndOfFile(Pos) (((Pos).LowPart == FILE_WRITE_TO_END_OF_FILE) && \
+                          ((Pos).HighPart == -1 ))
+                          
 //
 // Bug Check Codes Definitions
 //
@@ -479,14 +490,16 @@ FLT_PREOP_CALLBACK_STATUS
 SifsPreRead(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_PREOP_CALLBACK_STATUS
 SifsPreWrite(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_PREOP_CALLBACK_STATUS
@@ -746,6 +759,19 @@ SifsCompleteIrpContext (
     __in NTSTATUS Status 
     );
 
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonRead (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
+
+//-----------------------------------------------------------------------------
+//write
+
+NTSTATUS
+SifsCommonWrite (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
+
 //-----------------------------------------------------------------------------
 //block
 
@@ -756,6 +782,15 @@ SifsLockUserBuffer (
        __in  LOCK_OPERATION   Operation
        );
 
+PVOID
+SifsGetUserBufferOnRead (
+	__in  PFLT_IO_PARAMETER_BLOCK Iopb
+	);
+
+PVOID
+SifsGetUserBufferOnWrite(
+	__in  PFLT_IO_PARAMETER_BLOCK Iopb
+	);
 //-----------------------------------------------------------------------------
 //except
 
@@ -921,6 +956,28 @@ SifsCommonLockControl (
 //-----------------------------------------------------------------------------
 //cmcb
 BOOLEAN
+SifsAcquireForLazyWrite (
+    __in PVOID    Context,
+    __in BOOLEAN  Wait
+    );
+
+VOID
+SifsReleaseFromLazyWrite (
+	__in PVOID Context
+	);
+
+BOOLEAN
+SifsAcquireForReadAhead (
+	__in PVOID    Context,
+       __in BOOLEAN  Wait
+       );
+
+VOID
+SifsReleaseFromReadAhead (
+	__in PVOID Context
+	);
+
+BOOLEAN
 SifsNoOpAcquire (
     __in PVOID Fcb,
     __in BOOLEAN Wait
@@ -930,5 +987,42 @@ VOID
 SifsNoOpRelease (
     __in PVOID Fcb
 	);
+
+VOID
+SifsAcquireForCreateSection (
+    __in PFILE_OBJECT FileObject
+	);
+
+VOID
+SifsReleaseForCreateSection (
+    __in PFILE_OBJECT FileObject	
+    );
+
+NTSTATUS
+SifsAcquireFileForModWrite (
+    __in PFILE_OBJECT FileObject,
+    __in PLARGE_INTEGER EndingOffset,
+    __out PERESOURCE *ResourceToRelease,
+    __in PDEVICE_OBJECT DeviceObject
+	);
+
+NTSTATUS
+SifsReleaseFileForModWrite (
+    __in PFILE_OBJECT FileObject,
+    __in PERESOURCE ResourceToRelease,
+    __in PDEVICE_OBJECT DeviceObject
+);
+
+NTSTATUS
+SifsAcquireFileForCcFlush (
+    __in PFILE_OBJECT FileObject,
+    __in PDEVICE_OBJECT DeviceObject
+);
+
+NTSTATUS
+SifsReleaseFileForCcFlush (
+    __in PFILE_OBJECT FileObject,
+    __in PDEVICE_OBJECT DeviceObject
+);
 
 #endif /* __FILEFLT_SIFS_H__ */
