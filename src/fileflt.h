@@ -559,6 +559,50 @@ SwapPostFlushBuffers(
     __in FLT_POST_OPERATION_FLAGS Flags
     );
 
+FLT_PREOP_CALLBACK_STATUS
+SwapPreFastIoCheckIfPossible(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostFastIoCheckIfPossible(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreSetEa(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostSetEa(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreQueryEa(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostQueryEa(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
 
 VOID
 ReadDriverParameters (

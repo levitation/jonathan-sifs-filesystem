@@ -447,8 +447,16 @@ SifsCommonRead (
     ASSERT((IrpContext->Identifier.Type == SIFSICX) &&
            (IrpContext->Identifier.Size == sizeof(SIFS_IRP_CONTEXT)));
 
-    __try {
+    if(FLT_IS_FASTIO_OPERATION(IrpContext->Data)) {
 
+        retValue = SifsFastIoRead(IrpContext);
+
+	 goto SifsCommonReadCleanup;
+    }
+
+	 
+    __try {
+	
         if (FlagOn(IrpContext->Data->Iopb->MinorFunction, IRP_MN_COMPLETE)) {
 
             Status =  SifsReadComplete(IrpContext);
@@ -492,6 +500,8 @@ SifsCommonRead (
 	}
     }
 
+SifsCommonReadCleanup:
+	
     return retValue;
 }
 

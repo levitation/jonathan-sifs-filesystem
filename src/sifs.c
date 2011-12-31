@@ -683,10 +683,20 @@ FLT_PREOP_CALLBACK_STATUS
 SifsPreNetworkQueryOpen(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     )
 {
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		if(FLT_IS_FASTIO_OPERATION(Data)) {
+
+			retValue = FLT_PREOP_DISALLOW_FASTIO;
+		}
+	}
 
 	return retValue;
 }
@@ -740,3 +750,61 @@ SifsPreFlushBuffers(
 
 	return retValue;
 }
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreFastIoCheckIfPossible(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsFastIoCheckIfPossible);
+	}
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreQueryEa(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonFlushBuffers);
+	}
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreSetEa(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonSetEa);
+	}
+
+	return retValue;
+}
+

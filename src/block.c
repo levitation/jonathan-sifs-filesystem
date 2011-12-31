@@ -179,7 +179,7 @@ SifsGetUserBufferOnWrite(
 	__in  PFLT_IO_PARAMETER_BLOCK Iopb
 	)
 {
-    if (Iopb->Parameters.Read.MdlAddress) {
+    if (Iopb->Parameters.Write.MdlAddress) {
 
         return MmGetSystemAddressForMdlSafe(Iopb->Parameters.Write.MdlAddress, NormalPagePriority);
     } else {
@@ -188,3 +188,30 @@ SifsGetUserBufferOnWrite(
     }
 }
 
+PVOID
+SifsGetUserBufferOnSetEa(
+	__in  PFLT_IO_PARAMETER_BLOCK Iopb
+	)
+{
+    if (Iopb->Parameters.SetEa.MdlAddress) {
+
+        return MmGetSystemAddressForMdlSafe(Iopb->Parameters.SetEa.MdlAddress, NormalPagePriority);
+    } else {
+
+        return Iopb->Parameters.SetEa.EaBuffer;
+    }
+}
+
+PVOID
+SifsGetUserBufferOnQueryEa(
+	__in  PFLT_IO_PARAMETER_BLOCK Iopb
+	)
+{
+    if (Iopb->Parameters.QueryEa.MdlAddress) {
+
+        return MmGetSystemAddressForMdlSafe(Iopb->Parameters.QueryEa.MdlAddress, NormalPagePriority);
+    } else {
+
+        return Iopb->Parameters.QueryEa.EaBuffer;
+    }
+}

@@ -284,7 +284,9 @@ struct _SIFS_MCB {
 
 	LARGE_INTEGER		     AllocationSize;
 	LARGE_INTEGER		     ValidDataLength;
-	LARGE_INTEGER		     FileSize;		
+	LARGE_INTEGER		     FileSize;	
+
+	ULONG 				     NumberOfLinks;
     };
     
 };
@@ -522,7 +524,8 @@ FLT_PREOP_CALLBACK_STATUS
 SifsPreNetworkQueryOpen(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
-    __deref_out_opt PVOID *CompletionContext
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
     );
 
 FLT_PREOP_CALLBACK_STATUS
@@ -542,6 +545,30 @@ SifsPreLockControl(
 
 FLT_PREOP_CALLBACK_STATUS
 SifsPreFlushBuffers(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreFastIoCheckIfPossible(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreQueryEa(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreSetEa(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
     __deref_out_opt PVOID *CompletionContext,
@@ -791,6 +818,17 @@ PVOID
 SifsGetUserBufferOnWrite(
 	__in  PFLT_IO_PARAMETER_BLOCK Iopb
 	);
+
+PVOID
+SifsGetUserBufferOnSetEa(
+	__in  PFLT_IO_PARAMETER_BLOCK Iopb
+	);
+
+PVOID
+SifsGetUserBufferOnQueryEa(
+	__in  PFLT_IO_PARAMETER_BLOCK Iopb
+	);
+
 //-----------------------------------------------------------------------------
 //except
 
@@ -945,6 +983,36 @@ SifsIsFastIoPossible(
     __in PSIFS_FCB Fcb
 	);
 
+FLT_PREOP_CALLBACK_STATUS
+SifsFastIoCheckIfPossible (
+    __in PSIFS_IRP_CONTEXT IrpContext
+);
+
+FLT_PREOP_CALLBACK_STATUS
+SifsFastIoRead (
+	__in PSIFS_IRP_CONTEXT IrpContext
+       );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsFastIoWrite (
+    __in PSIFS_IRP_CONTEXT IrpContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsFastIoQueryBasicInfo (
+    __in PSIFS_IRP_CONTEXT IrpContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsFastIoQueryStandardInfo (
+    __in PSIFS_IRP_CONTEXT IrpContext
+);
+
+FLT_PREOP_CALLBACK_STATUS
+SifsFastIoQueryNetworkOpenInformation (
+    __in PSIFS_IRP_CONTEXT IrpContext
+);
+
 //-----------------------------------------------------------------------------
 //lock
 
@@ -1024,5 +1092,18 @@ SifsReleaseFileForCcFlush (
     __in PFILE_OBJECT FileObject,
     __in PDEVICE_OBJECT DeviceObject
 );
+
+//-----------------------------------------------------------------------------
+// ea
+
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonQueryEa (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
+
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonSetEa (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
 
 #endif /* __FILEFLT_SIFS_H__ */

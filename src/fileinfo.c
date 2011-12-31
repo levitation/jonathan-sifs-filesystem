@@ -28,10 +28,25 @@ SifsCommonQueryFileInformation (
     PSIFS_FCB               Fcb = NULL;
     PSIFS_MCB              Mcb = NULL;
     PSIFS_CCB              Ccb = NULL;
-    FILE_INFORMATION_CLASS  FileInformationClass;
+    FILE_INFORMATION_CLASS  FileInformationClass = IrpContext->Data->Iopb->Parameters.QueryFileInformation.FileInformationClass;
     ULONG                    Length = 0;
     PVOID                     Buffer = NULL;
     BOOLEAN                FcbResourceAcquired = FALSE;
+
+     if(FLT_IS_FASTIO_OPERATION(IrpContext->Data)) {
+
+	 if(FileInformationClass == FileBasicInformation){
+	 	
+        	retValue = SifsFastIoQueryBasicInfo(IrpContext);
+
+		goto SifsCommonQueryFileInformationCleanup;
+	 }else if(FileInformationClass == FileStandardInformation){
+
+	 	retValue = SifsFastIoQueryStandardInfo(IrpContext);
+
+		goto SifsCommonQueryFileInformationCleanup;
+	 }
+    }
 
     __try {
 
@@ -73,9 +88,6 @@ SifsCommonQueryFileInformation (
                (Ccb->Identifier.Size == sizeof(SIFS_CCB)));
 		
         Mcb = Fcb->Mcb;
-
-        FileInformationClass =
-            IrpContext->Data->Iopb->Parameters.QueryFileInformation.FileInformationClass;
 
         Length = IrpContext->Data->Iopb->Parameters.QueryFileInformation.Length;
         Buffer = IrpContext->Data->Iopb->Parameters.QueryFileInformation.InfoBuffer;
@@ -316,6 +328,8 @@ SifsCommonQueryFileInformation (
 	}
     }
 
+SifsCommonQueryFileInformationCleanup:
+	
     return retValue;
 }
 

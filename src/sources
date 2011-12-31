@@ -38,8 +38,16 @@ SOURCES=fileflt.c   \
 	 memory.c \
 	 except.c \
 	 read.c \
+	 write.c \
+	 ea.c \
 	 block.c \
 	 fileinfo.c \
 	 dirctl.c \
+	 fastio.c \
+	 cleanup.c \
+	 close.c \
+	 flush.c \
+	 lock.c \
+	 cmcb.c \
         fileflt.rc
 

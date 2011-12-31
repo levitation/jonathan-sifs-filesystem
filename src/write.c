@@ -512,7 +512,7 @@ SifsWriteComplete (
 }
 
 
-NTSTATUS
+FLT_PREOP_CALLBACK_STATUS
 SifsCommonWrite (
 	__in PSIFS_IRP_CONTEXT IrpContext
 	)
@@ -531,6 +531,15 @@ SifsCommonWrite (
     ASSERT((IrpContext->Identifier.Type == SIFSICX) &&
            (IrpContext->Identifier.Size == sizeof(SIFS_IRP_CONTEXT)));
 
+
+    if(FLT_IS_FASTIO_OPERATION(IrpContext->Data)) {
+
+        retValue = SifsFastIoWrite(IrpContext);
+
+	 goto SifsCommonWriteCleanup;
+    }
+
+	
     __try {
 
         if (IsFlagOn(IrpContext->Data->Iopb->MinorFunction, IRP_MN_COMPLETE)) {
@@ -581,6 +590,8 @@ SifsCommonWrite (
 	}
     }
 
-    return Status;
+SifsCommonWriteCleanup:
+	
+    return retValue;
 }
 
