@@ -173,6 +173,8 @@ typedef struct _VOLUME_CONTEXT {
     //  Holds the sector size for this volume.
     //
 
+    BOOLEAN Validate;
+	
     ULONG  Flags;
 	
     ULONG SectorSize;

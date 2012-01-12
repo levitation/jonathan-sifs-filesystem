@@ -422,15 +422,14 @@ Return Value:
 {
     NTSTATUS status = STATUS_INSUFFICIENT_RESOURCES;
 
+    RtlZeroMemory( &g_FileFltContext, sizeof( g_FileFltContext) );
+
+    g_FileFltContext.Status |= (FILEFLT_SYSTEM_INSTALL | FILEFLT_WORK_RUNNING);
+		
     if(module_init() == -1) {
 
 		goto SwapDriverEntryExit;
     }
-		
-    RtlZeroMemory( &g_FileFltContext, sizeof( g_FileFltContext) );
-
-    g_FileFltContext.Status |= (FILEFLT_SYSTEM_INSTALL | FILEFLT_WORK_RUNNING);
-
 
     //
     //  Get debug trace flags

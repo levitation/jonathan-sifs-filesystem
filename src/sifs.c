@@ -5,6 +5,29 @@
 #pragma alloc_text(PAGE, SifsDeQueueRequest)
 #endif
 
+BOOLEAN
+SifsCheckValidVolume(
+	__in DEVICE_TYPE VolumeDeviceType,
+	__in FLT_FILESYSTEM_TYPE VolumeFilesystemType
+	)
+{
+	BOOLEAN rc = FALSE;
+
+	if(((VolumeDeviceType == FILE_DEVICE_DISK_FILE_SYSTEM)
+		|| (VolumeDeviceType == FILE_DEVICE_NETWORK_FILE_SYSTEM)
+		|| (VolumeDeviceType == FILE_DEVICE_CD_ROM_FILE_SYSTEM))
+	    && ((VolumeFilesystemType == FLT_FSTYPE_NTFS)
+	    	|| (VolumeFilesystemType == FLT_FSTYPE_FAT)
+	    	|| (VolumeFilesystemType == FLT_FSTYPE_LANMAN)
+	    	|| (VolumeFilesystemType == FLT_FSTYPE_CDFS)
+	    	|| (VolumeFilesystemType == FLT_FSTYPE_UDFS))) {
+
+		rc = TRUE;
+	}
+
+	return rc;
+}
+
 NTSTATUS
 SifsInstanceSetup(
    __in PCFLT_RELATED_OBJECTS FltObjects,
@@ -30,7 +53,13 @@ SifsInstanceSetup(
     UNREFERENCED_PARAMETER( VolumeFilesystemType );
 
     try {
-        
+
+	if(SifsCheckValidVolume(VolumeDeviceType, VolumeFilesystemType) == FALSE){
+
+		leave;
+	}
+	
+	VolumeContext->Validate = TRUE;
         //
         //  Always get the volume properties, so I can get a sector size
         //
@@ -169,12 +198,15 @@ SifsCleanupContext(
 
 		volumeContext = Context;
 
-		SifsStopReaperThread(volumeContext);
-		SifsCleanupAllMcbs(volumeContext);
+		if(volumeContext->Validate == TRUE) {
+			
+			SifsStopReaperThread(volumeContext);
+			SifsCleanupAllMcbs(volumeContext);
 
-		RemoveEntryList(&volumeContext->NotifyList);
-		ExDeleteResourceLite(&(volumeContext->MainResource));
-		ExDeleteResourceLite(&(volumeContext->McbLock));	
+			RemoveEntryList(&volumeContext->NotifyList);
+			ExDeleteResourceLite(&(volumeContext->MainResource));
+			ExDeleteResourceLite(&(volumeContext->McbLock));
+		}
 		
 		ExDeleteNPagedLookasideList( &volumeContext->Pre2PostContextList );
 		
@@ -392,7 +424,9 @@ SifsBuildRequest (
     BOOLEAN             isTopLevelIrp = FALSE;
     PSIFS_IRP_CONTEXT   irpContext = NULL;
     NTSTATUS            status = STATUS_UNSUCCESSFUL;
-         
+
+    __asm int 3
+		
     __try {
 
         __try {
@@ -531,7 +565,9 @@ SifsPreCreate(
 			
 		goto SifsPreCreateCleanup;
 	}
-
+	   
+	__asm int 3
+		
 	if((fileExist == FALSE)
 	 	&& ((createDisposition == FILE_OPEN) || (createDisposition == FILE_OVERWRITE))) {
 	 	

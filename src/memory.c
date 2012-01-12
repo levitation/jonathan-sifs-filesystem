@@ -517,6 +517,8 @@ SifsReaperThread(
 
         /* wake up DirverEntry */
         KeSetEvent(&VolumeContext->Reaper.Engine, 0, FALSE);
+
+	 __leave;
 	 InitializeListHead(&(Head));
 
         /* now process looping */
