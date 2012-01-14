@@ -19,8 +19,6 @@ SifsCommonCleanup (
     PSIFS_MCB       Mcb = NULL;
     PVOLUME_CONTEXT VolumeContext = IrpContext->VolumeContext;
 
-
-    BOOLEAN         VcbResourceAcquired = FALSE;
     BOOLEAN         FcbResourceAcquired = FALSE;
     BOOLEAN         FcbPagingIoResourceAcquired = FALSE;
 
@@ -44,30 +42,13 @@ SifsCommonCleanup (
             __leave;
         }
 
-        VcbResourceAcquired =
-            ExAcquireResourceExclusiveLite(
-                &VolumeContext->MainResource,
-                IsFlagOn(IrpContext->Flags, IRP_CONTEXT_FLAG_WAIT)
-            );
-        
         ASSERT((Fcb->Identifier.Type == SIFSFCB) &&
                (Fcb->Identifier.Size == sizeof(SIFS_FCB)));
-
-        if (IsFlagOn(FileObject->Flags, FO_CLEANUP_COMPLETE)) {
-            if (IsFlagOn(FileObject->Flags, FO_FILE_MODIFIED) &&
-                    !IsFlagOn(VolumeContext->Flags, VCB_WRITE_PROTECTED) ) {
-                Status = SifsFlushFile(IrpContext, Fcb, Ccb);
-            }
-            __leave;
-        }
-
+        
         if (Ccb == NULL) {
             Status = STATUS_SUCCESS;
             __leave;
         }        
-
-        ExReleaseResourceLite(&VolumeContext->MainResource);
-        VcbResourceAcquired = FALSE;
 
         FcbResourceAcquired =
             ExAcquireResourceExclusiveLite(
@@ -91,11 +72,11 @@ SifsCommonCleanup (
             LARGE_INTEGER   SysTime;
             KeQuerySystemTime(&SysTime);
 
-            Fcb->Lower->CreationTime.QuadPart =
-                Fcb->Lower->ChangeTime.QuadPart = FsLinuxTime(SysTime);
             Fcb->Lower->LastAccessTime =
-                Fcb->Lower->LastWriteTime = FsNtTime(Fcb->Lower->CreationTime.QuadPart);
+                Fcb->Lower->LastWriteTime = FsNtTime(FsLinuxTime(SysTime));
 
+	     // save data
+	     
             SifsNotifyReportChange(
                 IrpContext,
                 VolumeContext,
@@ -255,10 +236,6 @@ SifsCommonCleanup (
 
         if (FcbResourceAcquired) {
             ExReleaseResourceLite(&Fcb->MainResource);
-        }
-
-        if (VcbResourceAcquired) {
-            ExReleaseResourceLite(&VolumeContext->MainResource);
         }
 
         if (!IrpContext->ExceptionInProgress) {

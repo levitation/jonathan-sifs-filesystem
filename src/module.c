@@ -64,6 +64,15 @@ int module_init(void)
 	                                    sizeof(SIFS_CCB),
 	                                    'BCCE',
 	                                    0 );	    
+
+	   ExInitializePagedLookasideList( &(g_FileFltContext.SifsMcbLookasideList),
+                                    NULL,
+                                    NULL,
+                                    0,
+                                    sizeof(SIFS_MCB),
+                                    'BCME',
+                                    0 );
+
 #endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB */
 
 	   rc = 0;
@@ -76,7 +85,8 @@ void module_exit(void)
 {
 #if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_DOUBLE_FCB)
 
-	ExDeleteNPagedLookasideList(&(g_FileFltContext.SifsCcbLookasideList));
+	ExDeletePagedLookasideList(&(g_FileFltContext.SifsMcbLookasideList));
+	ExDeletePagedLookasideList(&(g_FileFltContext.SifsCcbLookasideList));
 	ExDeleteNPagedLookasideList(&(g_FileFltContext.SifsFcbLookasideList));
 	ExDeleteNPagedLookasideList(&(g_FileFltContext.SifsIrpContextLookasideList));
 	

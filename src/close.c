@@ -25,7 +25,7 @@ SifsCommonClose (
     FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_COMPLETE;
 	
     NTSTATUS        Status = STATUS_SUCCESS;
-    PVOLUME_CONTEXT       Vcb = NULL;
+    PVOLUME_CONTEXT       Vcb = IrpContext->VolumeContext;
     BOOLEAN         VcbResourceAcquired = FALSE;
     PFILE_OBJECT    FileObject;
     PSIFS_FCB       Fcb;
@@ -76,24 +76,6 @@ SifsCommonClose (
             Ccb = (PSIFS_CCB) FileObject->FsContext2;
         }
 
-#if 0
-       if (Fcb->Identifier.Type == SIFSVCB) {
-
-            if (Ccb) {
-
-                SifsDerefXcb(&Vcb->ReferenceCount);
-                SifsFreeCcb(Ccb);
-
-                if (FileObject) {
-                    FileObject->FsContext2 = Ccb = NULL;
-                }
-            }
-
-            Status = STATUS_SUCCESS;
-            __leave;
-        }
-#endif
-
         if ( (Fcb->Identifier.Type != SIFSFCB) ||
                 (Fcb->Identifier.Size != sizeof(SIFS_FCB))) {
             __leave;
@@ -128,7 +110,7 @@ SifsCommonClose (
 
         if (Ccb) {
 
-            SifsFreeCcb(Vcb, Ccb);
+            SifsFreeCcb(Ccb);
 
             if (FileObject) {
                 FileObject->FsContext2 = Ccb = NULL;

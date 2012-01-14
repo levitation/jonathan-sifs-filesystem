@@ -657,7 +657,7 @@ Return Value:
 
         LOG_PRINT( LOGFL_ERRORS,
                    ("FileFlt!SwapPreCleanup:          Error getting volume context, status=%x\n",
-                    status) );
+                    status) );	 
 
          goto SwapPreCleanup_out;
      }
@@ -1069,6 +1069,8 @@ Return Value:
         LOG_PRINT( LOGFL_ERRORS,
                ("FileFlt!SwapPreSetInformation:          Error getting volume context, status=%x\n",
                 status) );
+
+	DbgPrint("FileFlt!SwapPreSetInformation:          Error getting volume context, status=%x\n", status);
 
         goto SwapPreSetInformationCleanup;
    }

@@ -249,6 +249,7 @@ SifsBuildName(
 	if(NT_SUCCESS(FsAllocateUnicodeString(Dest))) {
 
 		RtlCopyMemory(Dest->Buffer, Source->Buffer, Source->Length);
+		Dest->Length = Dest->MaximumLength;
 
 		rc = TRUE;
 	}
@@ -283,10 +284,10 @@ SifsAllocateMcb (
     /* initialize Mcb names */
     if (FileName) {
 
-        if (!SifsBuildName(&Mcb->ShortName, ShortName)) {
+        if (!SifsBuildName(ShortName, &Mcb->ShortName)) {
             goto errorout;
         }
-        if (!SifsBuildName(&Mcb->FullName, FileName)) {
+        if (!SifsBuildName(FileName, &Mcb->FullName)) {
             goto errorout;
         }
     }       

@@ -45,6 +45,8 @@ SifsInstanceSetup(
     PFLT_VOLUME_PROPERTIES volProp = (PFLT_VOLUME_PROPERTIES)volPropBuffer;
     PDEVICE_OBJECT volumeDevice = NULL;
     BOOLEAN bVolumeWritable = FALSE;
+    BOOLEAN vcbResourceInitialized = FALSE;
+    BOOLEAN notifySyncInitialized = FALSE;
 
     PAGED_CODE();
 
@@ -86,17 +88,17 @@ SifsInstanceSetup(
         
 	 VolumeContext->FileSystemType = VolumeFilesystemType;
 	 VolumeContext->DeviceType = VolumeDeviceType;
-	 ExInitializeNPagedLookasideList( &VolumeContext->Pre2PostContextList,
-                                     NULL,
-                                     NULL,
-                                     0,
-                                     sizeof(PRE_2_POST_CONTEXT),
-                                     PRE_2_POST_TAG,
-                                     0 );
-	 ExInitializeResourceLite(&VolumeContext->MainResource);
-	 ExInitializeResourceLite(&VolumeContext->McbLock);
+	 
+	 ExInitializeResourceLite(&VolumeContext->MainResource);	 	 
+	 ExInitializeResourceLite(&VolumeContext->McbLock);	 
+	 vcbResourceInitialized = TRUE;
+	 
 	 InitializeListHead(&VolumeContext->McbList);
+	 
 	 InitializeListHead(&VolumeContext->NotifyList);
+	 FsRtlNotifyInitializeSync(&VolumeContext->NotifySync);
+	 notifySyncInitialized = TRUE;
+
 	 KeInitializeEvent(&VolumeContext->Reaper.Engine,
                       SynchronizationEvent, FALSE);
 
@@ -163,15 +165,30 @@ SifsInstanceSetup(
 
     } finally {
 
+        
         //
         //  Remove the reference added to the device object by
         //  FltGetDiskDeviceObject.
         //
 
-        if (volumeDevice) {
+       if (!NT_SUCCESS(status)) {
+	   	
+		if(notifySyncInitialized) {
+			
+	        	FsRtlNotifyUninitializeSync(&VolumeContext->NotifySync);
+		}
+
+		if(vcbResourceInitialized) {
+
+			 ExDeleteResourceLite(&VolumeContext->McbLock);
+	               ExDeleteResourceLite(&VolumeContext->MainResource);
+		}
+       }
+		
+       if (volumeDevice) {
 
             ObDereferenceObject( volumeDevice );
-        }
+       }
     }
 
     return status;
@@ -203,12 +220,11 @@ SifsCleanupContext(
 			SifsStopReaperThread(volumeContext);
 			SifsCleanupAllMcbs(volumeContext);
 
+			FsRtlNotifyUninitializeSync(&volumeContext->NotifySync);
 			RemoveEntryList(&volumeContext->NotifyList);
-			ExDeleteResourceLite(&(volumeContext->MainResource));
 			ExDeleteResourceLite(&(volumeContext->McbLock));
-		}
-		
-		ExDeleteNPagedLookasideList( &volumeContext->Pre2PostContextList );
+			ExDeleteResourceLite(&(volumeContext->MainResource));
+		}	
 		
 		break;
 	case FLT_STREAM_CONTEXT:
@@ -425,8 +441,6 @@ SifsBuildRequest (
     PSIFS_IRP_CONTEXT   irpContext = NULL;
     NTSTATUS            status = STATUS_UNSUCCESSFUL;
 
-    __asm int 3
-		
     __try {
 
         __try {
@@ -566,8 +580,6 @@ SifsPreCreate(
 		goto SifsPreCreateCleanup;
 	}
 	   
-	__asm int 3
-		
 	if((fileExist == FALSE)
 	 	&& ((createDisposition == FILE_OPEN) || (createDisposition == FILE_OVERWRITE))) {
 	 	
@@ -708,7 +720,9 @@ SifsPreSetInformation(
 	SIFS_PARAMETERS parameters = {  0 };
 
 	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
-		
+
+		__asm int 3
+			
 		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonSetFileInformation);
 	}
 

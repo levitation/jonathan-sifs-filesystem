@@ -209,7 +209,6 @@ SifsGetLowerFileAttributes(
 	NTSTATUS status = STATUS_UNSUCCESSFUL;
 	FILE_BASIC_INFORMATION  fileBasicInformation;
 	FILE_STANDARD_INFORMATION fileStandardInformation;
-	FILE_VALID_DATA_LENGTH_INFORMATION fileValidDataLengthInformation;
 
 	status = FltQueryInformationFile(Instance,
 									 Mcb->Lower.FileObject,
@@ -237,19 +236,6 @@ SifsGetLowerFileAttributes(
 		goto SifsGetLowerFileAttributesCleanup;
 	}
 
-	status = FltQueryInformationFile(Instance,
-									 Mcb->Lower.FileObject,
-									 &fileValidDataLengthInformation,
-									 sizeof(fileValidDataLengthInformation),
-									 FileValidDataLengthInformation,
-									 NULL
-									 ) ;
-
-	if(!NT_SUCCESS(status)) {
-
-		goto SifsGetLowerFileAttributesCleanup;
-	}
-
 	Mcb->Lower.CreationTime = fileBasicInformation.CreationTime;
 	Mcb->Lower.LastWriteTime = fileBasicInformation.LastWriteTime;
 	Mcb->Lower.LastAccessTime = fileBasicInformation.LastAccessTime;
@@ -258,7 +244,7 @@ SifsGetLowerFileAttributes(
 	Mcb->Lower.AllocationSize = fileStandardInformation.AllocationSize;
 	Mcb->Lower.FileSize = fileStandardInformation.EndOfFile;
 	Mcb->Lower.Directory = fileStandardInformation.Directory;
-	Mcb->Lower.ValidDataLength = fileValidDataLengthInformation.ValidDataLength;
+	Mcb->Lower.ValidDataLength = fileStandardInformation.EndOfFile;
 
 SifsGetLowerFileAttributesCleanup:
 	
@@ -399,9 +385,9 @@ SifsCheckFcbTypeIsSifs(
 		
 		if(FileObject->FsContext){
 			
-			PFSRTL_COMMON_FCB_HEADER fcbHead = (PFSRTL_COMMON_FCB_HEADER)FileObject->FsContext;
+			PSIFS_FCBVCB        FcbOrVcb = (PSIFS_FCBVCB)FileObject->FsContext;
 			
-			if(fcbHead->NodeTypeCode == SIFSFCB){
+			if(FcbOrVcb->Identifier.Type == SIFSFCB){
 				
 				rc  = TRUE;
 			}
