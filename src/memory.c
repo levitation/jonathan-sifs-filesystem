@@ -249,7 +249,7 @@ SifsBuildName(
 	if(NT_SUCCESS(FsAllocateUnicodeString(Dest))) {
 
 		RtlCopyMemory(Dest->Buffer, Source->Buffer, Source->Length);
-		Dest->Length = Dest->MaximumLength;
+		Dest->Length = Source->Length;
 
 		rc = TRUE;
 	}

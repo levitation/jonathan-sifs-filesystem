@@ -216,8 +216,7 @@ SifsReleaseFileForModWrite (
 
 NTSTATUS
 SifsAcquireFileForCcFlush (
-    __in PFILE_OBJECT FileObject,
-    __in PDEVICE_OBJECT DeviceObject
+    __in PFILE_OBJECT FileObject
 )
 {
     PSIFS_FCB Fcb = FileObject->FsContext;
@@ -231,8 +230,7 @@ SifsAcquireFileForCcFlush (
 
 NTSTATUS
 SifsReleaseFileForCcFlush (
-    __in PFILE_OBJECT FileObject,
-    __in PDEVICE_OBJECT DeviceObject
+    __in PFILE_OBJECT FileObject
 )
 {
     PSIFS_FCB Fcb = FileObject->FsContext;

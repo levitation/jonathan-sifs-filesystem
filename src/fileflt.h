@@ -606,6 +606,99 @@ SwapPostQueryEa(
     __in FLT_POST_OPERATION_FLAGS Flags
     );
 
+FLT_PREOP_CALLBACK_STATUS
+SwapPreAcquireForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostAcquireForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreReleaseForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostReleaseForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreAcquireForModWrite(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostAcquireForModWrite(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreReleaseForModWrite(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostReleaseForModWrite(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreAcquireForCCFlush(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostAcquireForCCFlush(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreReleaseForCCFlush(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostReleaseForCCFlush(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
 VOID
 ReadDriverParameters (
     __in PUNICODE_STRING RegistryPath

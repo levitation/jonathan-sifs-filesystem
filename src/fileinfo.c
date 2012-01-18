@@ -867,7 +867,7 @@ SifsCommonSetFileInformation (
 	 }
     }
 
-    return Status;
+    return retValue;
 }
 
 

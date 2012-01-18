@@ -150,15 +150,17 @@ SifsWriteFile(
 
         if (IsFlagOn(Iopb->IrpFlags, IRP_SYNCHRONOUS_PAGING_IO) && !IrpContext->IsTopLevel) {
 
-            PFLT_CALLBACK_DATA TopData;
+            PFLT_CALLBACK_DATA TopData = IoGetTopLevelIrp();
 
-            TopData = IoGetTopLevelIrp();
+	     if ( ((ULONG_PTR)TopData > FSRTL_MAX_TOP_LEVEL_IRP_FLAG) &&
+                    (TopData == IrpContext->Data)) {
+                    
+	            if ((TopData->Iopb->MajorFunction == IRP_MJ_WRITE) &&
+	                        (TopData->Iopb->TargetFileObject->FsContext == FileObject->FsContext)) {
 
-            if ((TopData->Iopb->MajorFunction == IRP_MJ_WRITE) &&
-                        (TopData->Iopb->TargetFileObject->FsContext == FileObject->FsContext)) {
-
-                    RecursiveWriteThrough = TRUE;
-            }
+	                    RecursiveWriteThrough = TRUE;
+	            }
+	     	}
         }
 
         //
@@ -212,7 +214,7 @@ SifsWriteFile(
 
             if (!FltCheckLockForWriteAccess(
                         &Fcb->FileLockAnchor,
-                        IrpContext->Data         )) {
+                        IrpContext->Data)) {
                 Status = STATUS_FILE_LOCK_CONFLICT;
                 __leave;
             }
@@ -277,7 +279,7 @@ SifsWriteFile(
                 AllocationSize.QuadPart = CEILING_ALIGNED(ULONGLONG,
                                           (ULONGLONG)AllocationSize.QuadPart,
                                           (ULONGLONG)Vcb->SectorSize);
-                Status = SifsExpandAndTruncateFile(IrpContext, Vcb, Fcb->Mcb, &AllocationSize);
+                Status = SifsExpandAndTruncateFile(IrpContext, Fcb->Mcb, &AllocationSize);
                 if (AllocationSize.QuadPart > Last.QuadPart) {
                     Fcb->Header.AllocationSize.QuadPart = AllocationSize.QuadPart;
                     SetLongFlag(Fcb->Flags, FCB_ALLOC_IN_WRITE);
@@ -447,8 +449,8 @@ SifsWriteFile(
 
             if (Data) {
 
-                if (Status == STATUS_PENDING ||
-                        Status == STATUS_CANT_WAIT ) {
+                if ((Status == STATUS_PENDING) ||
+                        (Status == STATUS_CANT_WAIT) ) {
 
                     if (!bDeferred) {
                         Status = SifsQueueRequest(IrpContext);
@@ -584,7 +586,8 @@ SifsCommonWrite (
            SifsCompleteIrpContext(IrpContext, Status);
         }
 
-	 if(Status == STATUS_PENDING) {
+	 if((Status == STATUS_PENDING)
+	 	|| (Status == STATUS_CANT_WAIT)){
 
 		retValue = FLT_PREOP_PENDING;
 	}

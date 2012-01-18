@@ -362,14 +362,13 @@ SifsOpenUnderlyingFileCleanup:
 		if(mcb->Lower.FileObject) {
 
 			FsCloseFile(mcb->Lower.FileHandle, mcb->Lower.FileObject);
-		}
-		
+		}		
+
 		if(mcb) {
 
-			SifsDerefMcb(mcb);
+			SifsFreeMcb(mcb);
 		}
-	}
-	
+	}	
 
 	return status;
 }

@@ -131,6 +131,36 @@ CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
 	  0,
 	  SwapPreQueryEa,
 	  SwapPostQueryEa},
+
+	{IRP_MJ_ACQUIRE_FOR_CC_FLUSH,
+	  0,
+	  SwapPreAcquireForCCFlush,
+	  SwapPostAcquireForCCFlush},
+
+	{IRP_MJ_RELEASE_FOR_CC_FLUSH,
+	  0,
+	  SwapPreReleaseForCCFlush,
+	  SwapPostReleaseForCCFlush},
+
+	{IRP_MJ_ACQUIRE_FOR_SECTION_SYNCHRONIZATION,
+	  0,
+	  SwapPreAcquireForSectionSynchronization,
+	  SwapPostAcquireForSectionSynchronization},
+
+	{IRP_MJ_RELEASE_FOR_SECTION_SYNCHRONIZATION,
+	  0,
+	  SwapPreReleaseForSectionSynchronization,
+	  SwapPostReleaseForSectionSynchronization},
+
+	{IRP_MJ_ACQUIRE_FOR_MOD_WRITE,
+	  0,
+	  SwapPreAcquireForModWrite,
+	  SwapPostAcquireForModWrite},
+
+	{IRP_MJ_RELEASE_FOR_MOD_WRITE,
+	  0,
+	  SwapPreReleaseForModWrite,
+	  SwapPostReleaseForModWrite},	
 	
 	{ IRP_MJ_OPERATION_END }
 };
@@ -1357,7 +1387,7 @@ SwapPreLockControl(
     __deref_out_opt PVOID *CompletionContext
     )
 {
-	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
 	PVOLUME_CONTEXT volumeContext = NULL;
        NTSTATUS status = STATUS_SUCCESS;
 
@@ -1412,7 +1442,7 @@ SwapPreFlushBuffers(
     __deref_out_opt PVOID *CompletionContext
     )
 {
-	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
 	PVOLUME_CONTEXT volumeContext = NULL;
        NTSTATUS status = STATUS_SUCCESS;
 
@@ -1468,7 +1498,7 @@ SwapPreFastIoCheckIfPossible(
     __deref_out_opt PVOID *CompletionContext
     )
 {
-	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
 	PVOLUME_CONTEXT volumeContext = NULL;
        NTSTATUS status = STATUS_SUCCESS;
 
@@ -1525,7 +1555,7 @@ SwapPreSetEa(
     __deref_out_opt PVOID *CompletionContext
     )
 {
-	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
 	PVOLUME_CONTEXT volumeContext = NULL;
        NTSTATUS status = STATUS_SUCCESS;
 
@@ -1580,7 +1610,7 @@ SwapPreQueryEa(
     __deref_out_opt PVOID *CompletionContext
     )
 {
-	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
 	PVOLUME_CONTEXT volumeContext = NULL;
        NTSTATUS status = STATUS_SUCCESS;
 
@@ -1617,6 +1647,339 @@ SwapPreQueryEaCleanup:
 
 FLT_POSTOP_CALLBACK_STATUS
 SwapPostQueryEa(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreAcquireForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	PVOLUME_CONTEXT volumeContext = NULL;
+       NTSTATUS status = STATUS_SUCCESS;
+
+    	PAGED_CODE();
+
+	status = FltGetVolumeContext( FltObjects->Filter,
+                                  FltObjects->Volume,
+                                  &volumeContext );
+
+	if (!NT_SUCCESS(status)) {
+
+	    LOG_PRINT( LOGFL_ERRORS,
+	               ("FileFlt!SwapPreQueryEa:          Error getting volume context, status=%x\n",
+	                status) );
+
+	     goto SwapPreQueryEaCleanup;
+	}
+	
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
+	retValue = SifsPreAcquireForSectionSynchronization(Data, FltObjects, CompletionContext, volumeContext);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
+SwapPreQueryEaCleanup:
+
+	if(volumeContext != NULL) {
+
+		FltReleaseContext(volumeContext);
+	}
+	
+	return retValue;
+}
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostAcquireForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+
+	return retValue;
+}
+
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreReleaseForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	PVOLUME_CONTEXT volumeContext = NULL;
+       NTSTATUS status = STATUS_SUCCESS;
+
+    	PAGED_CODE();
+
+	status = FltGetVolumeContext( FltObjects->Filter,
+                                  FltObjects->Volume,
+                                  &volumeContext );
+
+	if (!NT_SUCCESS(status)) {
+
+	    LOG_PRINT( LOGFL_ERRORS,
+	               ("FileFlt!SwapPreQueryEa:          Error getting volume context, status=%x\n",
+	                status) );
+
+	     goto SwapPreQueryEaCleanup;
+	}
+	
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
+	retValue = SifsPreReleaseForSectionSynchronization(Data, FltObjects, CompletionContext, volumeContext);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
+SwapPreQueryEaCleanup:
+
+	if(volumeContext != NULL) {
+
+		FltReleaseContext(volumeContext);
+	}
+	
+	return retValue;
+}
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostReleaseForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+
+	return retValue;
+}
+
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreAcquireForModWrite(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	PVOLUME_CONTEXT volumeContext = NULL;
+       NTSTATUS status = STATUS_SUCCESS;
+
+    	PAGED_CODE();
+
+	status = FltGetVolumeContext( FltObjects->Filter,
+                                  FltObjects->Volume,
+                                  &volumeContext );
+
+	if (!NT_SUCCESS(status)) {
+
+	    LOG_PRINT( LOGFL_ERRORS,
+	               ("FileFlt!SwapPreQueryEa:          Error getting volume context, status=%x\n",
+	                status) );
+
+	     goto SwapPreQueryEaCleanup;
+	}
+	
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
+	retValue = SifsPreAcquireForModWrite(Data, FltObjects, CompletionContext, volumeContext);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
+SwapPreQueryEaCleanup:
+
+	if(volumeContext != NULL) {
+
+		FltReleaseContext(volumeContext);
+	}
+	
+	return retValue;
+}
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostAcquireForModWrite(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+
+	return retValue;
+}
+
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreReleaseForModWrite(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	PVOLUME_CONTEXT volumeContext = NULL;
+       NTSTATUS status = STATUS_SUCCESS;
+
+    	PAGED_CODE();
+
+	status = FltGetVolumeContext( FltObjects->Filter,
+                                  FltObjects->Volume,
+                                  &volumeContext );
+
+	if (!NT_SUCCESS(status)) {
+
+	    LOG_PRINT( LOGFL_ERRORS,
+	               ("FileFlt!SwapPreQueryEa:          Error getting volume context, status=%x\n",
+	                status) );
+
+	     goto SwapPreQueryEaCleanup;
+	}
+	
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
+	retValue = SifsPreReleaseForModWrite(Data, FltObjects, CompletionContext, volumeContext);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
+SwapPreQueryEaCleanup:
+
+	if(volumeContext != NULL) {
+
+		FltReleaseContext(volumeContext);
+	}
+	
+	return retValue;
+}
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostReleaseForModWrite(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreAcquireForCCFlush(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	PVOLUME_CONTEXT volumeContext = NULL;
+       NTSTATUS status = STATUS_SUCCESS;
+
+    	PAGED_CODE();
+
+	status = FltGetVolumeContext( FltObjects->Filter,
+                                  FltObjects->Volume,
+                                  &volumeContext );
+
+	if (!NT_SUCCESS(status)) {
+
+	    LOG_PRINT( LOGFL_ERRORS,
+	               ("FileFlt!SwapPreQueryEa:          Error getting volume context, status=%x\n",
+	                status) );
+
+	     goto SwapPreQueryEaCleanup;
+	}
+	
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
+	retValue = SifsPreAcquireForCCFlush(Data, FltObjects, CompletionContext, volumeContext);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
+SwapPreQueryEaCleanup:
+
+	if(volumeContext != NULL) {
+
+		FltReleaseContext(volumeContext);
+	}
+	
+	return retValue;
+}
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostAcquireForCCFlush(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_POSTOP_FINISHED_PROCESSING;
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreReleaseForCCFlush(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	PVOLUME_CONTEXT volumeContext = NULL;
+       NTSTATUS status = STATUS_SUCCESS;
+
+    	PAGED_CODE();
+
+	status = FltGetVolumeContext( FltObjects->Filter,
+                                  FltObjects->Volume,
+                                  &volumeContext );
+
+	if (!NT_SUCCESS(status)) {
+
+	    LOG_PRINT( LOGFL_ERRORS,
+	               ("FileFlt!SwapPreQueryEa:          Error getting volume context, status=%x\n",
+	                status) );
+
+	     goto SwapPreQueryEaCleanup;
+	}
+	
+#if (FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB)
+
+	retValue = SifsPreReleaseForCCFlush(Data, FltObjects, CompletionContext, volumeContext);
+
+#endif /* FLT_FRAMEWORK_TYPE_USED == FLT_FRAMEWORK_TYPE_SINGLE_FCB */
+
+SwapPreQueryEaCleanup:
+
+	if(volumeContext != NULL) {
+
+		FltReleaseContext(volumeContext);
+	}
+	
+	return retValue;
+}
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostReleaseForCCFlush(
     __inout PFLT_CALLBACK_DATA Cbd,
     __in PCFLT_RELATED_OBJECTS FltObjects,
     __inout_opt PVOID CbdContext,

@@ -575,6 +575,57 @@ SifsPreSetEa(
     __in PVOLUME_CONTEXT VolumeContext
     );
 
+FLT_PREOP_CALLBACK_STATUS
+SifsPreAcquireForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreReleaseForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreAcquireForModWrite(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreReleaseForModWrite(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreAcquireForCCFlush(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreReleaseForCCFlush(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
 ULONG
 SifsValidateFileSize(
 	__in PSTREAM_CONTEXT StreamContext
@@ -1083,14 +1134,12 @@ SifsReleaseFileForModWrite (
 
 NTSTATUS
 SifsAcquireFileForCcFlush (
-    __in PFILE_OBJECT FileObject,
-    __in PDEVICE_OBJECT DeviceObject
+    __in PFILE_OBJECT FileObject
 );
 
 NTSTATUS
 SifsReleaseFileForCcFlush (
-    __in PFILE_OBJECT FileObject,
-    __in PDEVICE_OBJECT DeviceObject
+    __in PFILE_OBJECT FileObject
 );
 
 //-----------------------------------------------------------------------------

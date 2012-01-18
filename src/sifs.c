@@ -721,8 +721,6 @@ SifsPreSetInformation(
 
 	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
 
-		__asm int 3
-			
 		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonSetFileInformation);
 	}
 
@@ -858,3 +856,99 @@ SifsPreSetEa(
 	return retValue;
 }
 
+FLT_PREOP_CALLBACK_STATUS
+SifsPreAcquireForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	
+	return retValue;
+}
+
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreReleaseForSectionSynchronization(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+
+	return retValue;
+}
+
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreAcquireForModWrite(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+
+	return retValue;
+}
+
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreReleaseForModWrite(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreAcquireForCCFlush(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		SifsAcquireFileForCcFlush(FltObjects->FileObject);
+
+		retValue = FLT_PREOP_COMPLETE;
+	}
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreReleaseForCCFlush(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_POSTOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		SifsReleaseFileForCcFlush(FltObjects->FileObject);
+
+		retValue = FLT_PREOP_COMPLETE;
+	}
+
+	return retValue;
+}
