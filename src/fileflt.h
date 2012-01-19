@@ -607,6 +607,51 @@ SwapPostQueryEa(
     );
 
 FLT_PREOP_CALLBACK_STATUS
+SwapPreFileSystemControl(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostFileSystemControl(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreQueryVolumeInformation(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostQueryVolumeInformation(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SwapPreSetVolumeInformation(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
+    );
+
+FLT_POSTOP_CALLBACK_STATUS
+SwapPostSetVolumeInformation(
+    __inout PFLT_CALLBACK_DATA Cbd,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __inout_opt PVOID CbdContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
+    );
+
+FLT_PREOP_CALLBACK_STATUS
 SwapPreAcquireForSectionSynchronization(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,

@@ -857,6 +857,74 @@ SifsPreSetEa(
 }
 
 FLT_PREOP_CALLBACK_STATUS
+SifsPreFileSystemControl(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		retValue = SifsBuildRequest(Data, FltObjects, CompletionContext, VolumeContext, &parameters, SifsCommonFileSystemControl);
+	}
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreQueryVolumeInformation(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		FltQueryVolumeInformation(FltObjects->Instance, &Data->IoStatus, Data->Iopb->Parameters.QueryVolumeInformation.VolumeBuffer
+			, Data->Iopb->Parameters.QueryVolumeInformation.Length, Data->Iopb->Parameters.QueryVolumeInformation.FsInformationClass);
+
+		FltSetCallbackDataDirty(Data);
+
+		retValue = FLT_PREOP_COMPLETE;
+	}
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreSetVolumeInformation(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    )
+{
+	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+	SIFS_PARAMETERS parameters = {  0 };
+
+	if(SifsCheckFcbTypeIsSifs(FltObjects->FileObject) == TRUE) {
+		
+		FltSetVolumeInformation(FltObjects->Instance, &Data->IoStatus, Data->Iopb->Parameters.SetVolumeInformation.VolumeBuffer
+			, Data->Iopb->Parameters.SetVolumeInformation.Length, Data->Iopb->Parameters.SetVolumeInformation.FsInformationClass);
+
+		FltSetCallbackDataDirty(Data);
+
+		retValue = FLT_PREOP_COMPLETE;
+		
+	}
+
+	return retValue;
+}
+
+FLT_PREOP_CALLBACK_STATUS
 SifsPreAcquireForSectionSynchronization(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,

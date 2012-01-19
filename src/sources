@@ -49,5 +49,6 @@ SOURCES=fileflt.c   \
 	 flush.c \
 	 lock.c \
 	 cmcb.c \
+	 fsctl.c \
         fileflt.rc
 

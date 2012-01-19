@@ -568,7 +568,31 @@ SifsPreQueryEa(
     );
 
 FLT_PREOP_CALLBACK_STATUS
+SifsPreQueryVolumeInformation(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreSetVolumeInformation(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
 SifsPreSetEa(
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext,
+    __in PVOLUME_CONTEXT VolumeContext
+    );
+
+FLT_PREOP_CALLBACK_STATUS
+SifsPreFileSystemControl(
     __inout PFLT_CALLBACK_DATA Data,
     __in PCFLT_RELATED_OBJECTS FltObjects,
     __deref_out_opt PVOID *CompletionContext,
@@ -1152,6 +1176,14 @@ SifsCommonQueryEa (
 
 FLT_PREOP_CALLBACK_STATUS
 SifsCommonSetEa (
+	__in PSIFS_IRP_CONTEXT IrpContext
+	);
+
+//-----------------------------------------------------------------------------
+// fsctl
+
+FLT_PREOP_CALLBACK_STATUS
+SifsCommonFileSystemControl (
 	__in PSIFS_IRP_CONTEXT IrpContext
 	);
 
