@@ -25,13 +25,24 @@ SifsCommonFileSystemControl (
     __try {
 
 	ULONG LengthReturned = 0;
-	
+	PVOID InputBuffer = NULL;
+	PVOID OutputBuffer = NULL;
+
+	if(IsFlagOn(Data->Flags, FLTFL_CALLBACK_DATA_SYSTEM_BUFFER)) {
+
+		InputBuffer = Data->Iopb->Parameters.FileSystemControl.Buffered.SystemBuffer;
+		OutputBuffer = Data->Iopb->Parameters.FileSystemControl.Buffered.SystemBuffer;
+	}else{
+
+		InputBuffer = Data->Iopb->Parameters.FileSystemControl.Neither.InputBuffer;
+		OutputBuffer = Data->Iopb->Parameters.FileSystemControl.Neither.OutputBuffer;
+	}
 	
  	Status = FltFsControlFile(IrpContext->FltObjects->Instance, Fcb->Mcb->Lower.FileObject
 		, Data->Iopb->Parameters.FileSystemControl.Common.FsControlCode
-		, Data->Iopb->Parameters.FileSystemControl.Neither.InputBuffer
+		, InputBuffer
 		, Data->Iopb->Parameters.FileSystemControl.Common.InputBufferLength
-		, Data->Iopb->Parameters.FileSystemControl.Neither.OutputBuffer
+		, OutputBuffer
 		, Data->Iopb->Parameters.FileSystemControl.Common.OutputBufferLength
 		, &LengthReturned);
 
